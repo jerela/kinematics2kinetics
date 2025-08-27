@@ -1,13 +1,11 @@
 import torch
 import torch.nn.functional as F
 from torch.optim import Adam
-
 from torch.utils.data import DataLoader
-
-import matplotlib.pyplot as plt
 
 from datasets import CustomTimeSeriesDataset
 from networks import KineticsLSTM
+from visualization import plotter
 
 torch.manual_seed(1)
 
@@ -65,7 +63,7 @@ def main():
     
     output_untrained = model(sample_input).detach()
     
-    train(model=model, dataloader=dataloader, n_epochs=10000, threshold=0.0005)
+    train(model=model, dataloader=dataloader, n_epochs=10000, threshold=0.05)
 
     output_trained = model(sample_input).detach()
 
@@ -75,19 +73,10 @@ def main():
     print(f'Loss trained: {str(loss_trained)}')
     
 
-    plt.subplot(131)
-    plt.plot(sample_target.detach().squeeze(0))
-    plt.title('target')
-    plt.subplot(132)
-    plt.plot(output_untrained.squeeze(0))
-    plt.title('untrained prediction')
-    plt.subplot(133)
-    plt.plot(output_trained.squeeze(0))
-    plt.title('trained prediction')
+    plottable_data = (sample_target.detach().squeeze(0), output_untrained.squeeze(0), output_trained.squeeze(0))
+    plottable_titles = ('target', 'untrained prediction', 'trained prediction')
+    plotter(plottable_data, plottable_titles)
     
-    
-
-    plt.show()
 
 if __name__ == "__main__":
     main()
