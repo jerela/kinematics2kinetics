@@ -7,10 +7,12 @@ from datasets import CustomTimeSeriesDataset
 from networks import KineticsLSTM
 from visualization import plotter
 
-torch.manual_seed(1)
+from options import rng_seed, batch_size, learning_rate, training_threshold, max_epochs
+
+torch.manual_seed(rng_seed)
 
 
-def train(model, dataloader, n_epochs = 100, lr = 0.01, threshold = 0.01):
+def train(model, data_loader, n_epochs = 100, lr = 0.01, threshold = 0.01):
     
     # select optimizer and learning rate
     optimizer = Adam(model.parameters(), lr=lr)
@@ -22,7 +24,7 @@ def train(model, dataloader, n_epochs = 100, lr = 0.01, threshold = 0.01):
     for epoch in range(n_epochs):
         total_loss = 0.0
         
-        for i_input, i_target in dataloader:
+        for i_input, i_target in data_loader:
             i_output = model(i_input).permute(0,2,1)
             
             loss = ((i_output - i_target)**2).mean()
@@ -32,9 +34,10 @@ def train(model, dataloader, n_epochs = 100, lr = 0.01, threshold = 0.01):
             total_loss += loss
             
         
-        #if total_loss < 50:
+        print(f'Step: {str(epoch+1)}, final loss: {str(total_loss)}')
+        
         if abs(total_loss-previous_total_loss) < threshold:
-            print(f'Steps taken: {str(epoch)}')
+            print(f'Steps taken: {str(epoch+1)}')
             break
         
         previous_total_loss = total_loss
@@ -42,7 +45,7 @@ def train(model, dataloader, n_epochs = 100, lr = 0.01, threshold = 0.01):
         optimizer.step()
         optimizer.zero_grad()
         
-        print(f'Step: {str(epoch+1)}, final loss: {str(total_loss)}')
+        
     
 
 
@@ -51,7 +54,7 @@ def main():
     
     dataset = CustomTimeSeriesDataset('C:/Users/lavik/OneDrive/Documents/Lencioni/processed_data.csv')
     
-    dataloader = DataLoader(dataset, shuffle=True)
+    dataloader = DataLoader(dataset, shuffle=True, batch_size=batch_size)
     
     sample_input, sample_target = dataset[0]
     
@@ -63,7 +66,7 @@ def main():
     
     output_untrained = model(sample_input).detach()
     
-    train(model=model, dataloader=dataloader, n_epochs=10000, threshold=0.05)
+    train(model=model, data_loader=dataloader, n_epochs=max_epochs, threshold=training_threshold, lr=learning_rate)
 
     output_trained = model(sample_input).detach()
 
