@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset
 import pandas as pd
 
-
+from options import rng_seed
 
 class CustomTimeSeriesDataset(Dataset):
     
@@ -10,11 +10,111 @@ class CustomTimeSeriesDataset(Dataset):
         df = pd.read_csv(file)
         print(df)
         
-        unique_cols = self.find_unique_column_labels(df)
-                    
+        self.__process_scalar_data(df)
+        self.__process_metadata(df)
+        #self.__process_time_series_data(df)
+        
+        self.get_split_indices()
+        
+    def __len__(self):
+        return self.num_rows
+        
+    def __getitem__(self,idx):
+        sample_input = self.inputs[idx,:,:]
+        sample_target = self.targets[idx,:,:]
+        return sample_input, sample_target
+    
+    # get indices that are split according to a given list of fractions, while making sure no data rows of the same subject are placed in different subsets
+    def get_split_indices(self, fractions=(70,20,10), generator=torch.Generator().manual_seed(rng_seed)):
+        
+        # inner function for inserting indices into a subset; because this is used in two different points in the outer function, we'll just define it once here
+        def populate(target_index):
+            # define subset_sizes and subset_indices as nonlocal so that we can modify them inside this inner function instead of just reading them
+            nonlocal subset_sizes
+            nonlocal subset_indices
+            subset_sizes[target_index] += n_selected_rows
+            for row in idx_rows:
+                subset_indices[target_index].append(row)
+        
+        # calculate normalized fractions in case the user gives the fractions as percentage points or another format that doesn't add up to 1.0
+        fractions_normalized = [float(x)/sum(fractions) for x in fractions]
+        
+        # we track the number of data rows in each of the subsets with subset_sizes, while subset_indices stores the corresponding row indices
+        subset_sizes = [0 for x in fractions]
+        subset_indices = [[] for x in fractions]
+        # for each subject in a random order, place the trials of that subject in a subset, filling each subset one at a time
+        n_subjects = len(self.unique_subject_ids)
+        # shuffle the indices randomly so we don't go through the subjects in order
+        idx_shuffled = torch.randperm(n_subjects, generator=generator)
+        for i in idx_shuffled:
+            # get the unique identifier of the current subject
+            current_subject = self.unique_subject_ids[i]
+            # calculate how many rows of data exist for that subject
+            idx_rows = [x==current_subject for x in self.subject_ids]
+            # count the number of the data rows for the subject
+            n_selected_rows = idx_rows.count(True)
+            
+            can_fit_in_subset = False
+            # check if there is available space in any of the subsets
+            for j in range(len(fractions)):
+                if subset_sizes[j]+n_selected_rows <= self.num_rows*fractions_normalized[j]:
+                    can_fit_in_subset = True
+                    populate(j)
+                    break
+            
+            # if there was not enough space in any of the subjects, then we find the subset that is the least full, and append to it
+            if not can_fit_in_subset:
+                # identify the subset with the most room remaining
+                occupation = [float(x)/self.num_rows*fractions_normalized[j] for x in subset_sizes]
+                idx_min = torch.argmin(torch.tensor(occupation))
+                populate(idx_min)
+        
+        print(f'Final subset sizes: {subset_sizes}')
+        print(f'Fractions of the final subset sizes: {[round(float(x)/sum(subset_sizes),2) for x in subset_sizes]}')
+        return subset_indices
+    
+    # get the number of features (input and target vectors) as a 2-element tuple
+    def get_num_features(self):
+        n_input_features = len(self.inputs[0,:,0])
+        n_target_features = len(self.targets[0,:,0])
+        return n_input_features, n_target_features
+    
+    # process information like dataset name
+    def __process_metadata(self, data_frame):
+        self.dataset_name = data_frame['dataset']
+        unique_datasets = set([x for x in self.dataset_name])
+        print(f'Unique datasets in the data: {unique_datasets}')
+        
+        self.subject_ids = [x+'_'+y for x,y in zip(data_frame['dataset'], data_frame['subject_name'])]
+        self.unique_subject_ids = list(set(self.subject_ids))
+        # NOTE: we must sort the list if we want reproducible results while using it because set() has non-deterministic behaviour
+        self.unique_subject_ids.sort()
+        print(f'Unique subject IDs: {self.unique_subject_ids}')
+    
+    # process all scalar-format data like subject demographics
+    def __process_scalar_data(self,data_frame):
+        # store the number of rows
+        self.num_rows = len(data_frame.index)
+        
+        
+        self.body_mass = self.__series_to_tensor(data_frame['body_mass'])
+        self.body_height = torch.tensor(self.__convert_height_to_meters(data_frame['body_height']))
+        self.sex = self.__map_sex_to_binary(data_frame['sex'])
+        self.age = self.__series_to_tensor(data_frame['age'])
+        
+        self.gait_speed = self.__series_to_tensor(data_frame['gait_speed'])
+        self.gait_cycle_duration = self.__series_to_tensor(data_frame['gait_cycle_duration'])
+        
+        print(f'Body mass: {self.body_mass}')
+        print(f'Body height: {self.body_height}')
+        print(f'Sex: {self.sex}')
+    
+    # process all time series format data like input kinematics and output kinetics
+    def __process_time_series_data(self,data_frame):
+        unique_cols = self.__find_unique_column_labels(data_frame)
         print(unique_cols)
         
-        data = self.time_series_data_to_tensor(df,unique_cols)
+        data = self.__time_series_data_to_tensor(data_frame,unique_cols)
         print(data)
         
         idx_jointangles = []
@@ -29,31 +129,11 @@ class CustomTimeSeriesDataset(Dataset):
         print(f'Idx of joint moments: {idx_jointmoments}')
         
         # split the data tensor to inputs and targets knowing that the first 12 labels are for joint kinematics (inputs) and the remaining 9 for joint moments (targets)
-        #self.inputs = data[:,:n_jointangles,:]
         self.inputs = data[:,idx_jointangles,:]
-        #self.targets = data[:,n_jointangles:,:]
         self.targets = data[:,idx_jointmoments,:]
-        
-        # store the number of rows
-        self.rows = len(df.index)
-        
-        
-    def __len__(self):
-        return self.rows
-        
-    def __getitem__(self,idx):
-        sample_input = self.inputs[idx,:,:]
-        sample_target = self.targets[idx,:,:]
-        return sample_input, sample_target
-        
-    # get the number of features (input and target vectors) as a 2-element tuple
-    def get_num_features(self):
-        n_input_features = len(self.inputs[0,:,0])
-        n_target_features = len(self.targets[0,:,0])
-        return n_input_features, n_target_features
 
     # get a list of unique column labels of time series variables
-    def find_unique_column_labels(self, dataframe):
+    def __find_unique_column_labels(self, dataframe):
         # construct a list of unique column labels (i.e., "HipFlx_12" and "HipFlx_45" become just "HipFlx")
         cols = list(dataframe.columns.values)
         unique_cols = []
@@ -67,7 +147,7 @@ class CustomTimeSeriesDataset(Dataset):
         return unique_cols
     
     # insert the read time series into a single tensor
-    def time_series_data_to_tensor(self, dataframe, unique_cols):
+    def __time_series_data_to_tensor(self, dataframe, unique_cols):
         # read all time series data into a tensor
         data = torch.empty(len(dataframe.index), len(unique_cols), 101)
         for s in range(len(dataframe.index)):
@@ -77,4 +157,28 @@ class CustomTimeSeriesDataset(Dataset):
                     current_col = unique_cols[i_col] + '_' + str(i+1)
                     data[s, i_col, i] = dataframe[current_col][s]
         return data
-                    
+    
+    # if height is given in millimeters or centimeters, convert it to meters
+    def __convert_height_to_meters(self,heights):
+        heights_float = [float(height) for height in heights]
+        for i in range(len(heights_float)):
+            value = heights_float[i]
+            if value > 1000:
+                value /= 1000.0
+            elif value > 100:
+                value /= 100.0
+            heights_float[i] = value
+        return heights_float
+    
+    # convert from a pandas Series to a torch Tensor
+    def __series_to_tensor(self,series):
+        return torch.tensor(series.values)
+    
+    # map sex/gender, which may be given as string 'F' or 'M', to binary integers 0 and 1 so that it can be processed numerically later by the neural network
+    def __map_sex_to_binary(self,sexes):
+        if sexes.dtype == 'object':
+            return torch.tensor([int(sex=='F') for sex in sexes])
+        # if sex is not a string (represented by the 'object' dtype), we assume it is already an integer and just convert to tensor
+        else:
+            return self.__series_to_tensor(sexes)
+            
