@@ -1,21 +1,25 @@
 import torch
 import torch.nn.functional as F
 from torch.optim import Adam
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 
 from datasets import CustomTimeSeriesDataset
-from networks import KineticsLSTM
+from networks import KineticsLSTM, DemographicKineticsLSTM
 from visualization import plotter
 
-from options import rng_seed, batch_size, learning_rate, training_threshold, max_epochs
+from options import rng_seed, batch_size, training_threshold, max_epochs, file_dataset, lr_initial, lr_gamma, lr_step_size
 
 torch.manual_seed(rng_seed)
 
+def loss_fn(predicted, target):
+    return ((predicted - target)**2).mean()
 
 def train(model, data_loader, n_epochs = 100, lr = 0.01, threshold = 0.01):
     
     # select optimizer and learning rate
     optimizer = Adam(model.parameters(), lr=lr)
+    scheduler = StepLR(optimizer, lr_step_size, lr_gamma)
     
     # keep track of previous total loss so we know to break out of the epoch loop if total loss doesn't change between epochs
     previous_total_loss = 0.0
@@ -27,23 +31,24 @@ def train(model, data_loader, n_epochs = 100, lr = 0.01, threshold = 0.01):
         for i_input_scalars, i_input_time_series, i_target in data_loader:
             i_output = model((i_input_scalars, i_input_time_series)).permute(0,2,1)
             
-            loss = ((i_output - i_target)**2).mean()
+            loss = loss_fn(i_output,i_target)
             
             loss.backward()
             
             total_loss += loss
             
         
-        print(f'Step: {str(epoch+1)}, final loss: {str(total_loss)}')
+        print(f'Epoch: {str(epoch+1)}, final loss: {total_loss}, learning rate: {scheduler.get_last_lr()}')
         
         if abs(total_loss-previous_total_loss) < threshold:
-            print(f'Steps taken: {str(epoch+1)}')
+            print(f'Breaking because threshold loss was subceeded. Steps taken: {str(epoch+1)}')
             break
         
         previous_total_loss = total_loss
         
         optimizer.step()
         optimizer.zero_grad()
+        scheduler.step()
         
         
     
@@ -51,8 +56,7 @@ def train(model, data_loader, n_epochs = 100, lr = 0.01, threshold = 0.01):
 
 def main():
     
-    
-    dataset = CustomTimeSeriesDataset('C:/Users/lavik/OneDrive/Documents/Lencioni/processed_data.csv')
+    dataset = CustomTimeSeriesDataset(file_dataset)
     
     dataloader = DataLoader(dataset, shuffle=True, batch_size=batch_size)
     
@@ -63,11 +67,11 @@ def main():
     sample_target = sample_target.unsqueeze(0).permute(0,2,1)
     
     n_inputs, n_targets = dataset.get_num_features()
-    model = KineticsLSTM(n_inputs,n_targets)
+    model = DemographicKineticsLSTM(n_inputs,n_targets)
     
     output_untrained = model((sample_input_scalars, sample_input_time_series)).detach()
     
-    train(model=model, data_loader=dataloader, n_epochs=max_epochs, threshold=training_threshold, lr=learning_rate)
+    train(model=model, data_loader=dataloader, n_epochs=max_epochs, threshold=training_threshold, lr=lr_initial)
 
     output_trained = model((sample_input_scalars, sample_input_time_series)).detach()
 
