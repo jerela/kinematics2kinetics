@@ -24,8 +24,8 @@ def train(model, data_loader, n_epochs = 100, lr = 0.01, threshold = 0.01):
     for epoch in range(n_epochs):
         total_loss = 0.0
         
-        for i_input, i_target in data_loader:
-            i_output = model(i_input).permute(0,2,1)
+        for i_input_scalars, i_input_time_series, i_target in data_loader:
+            i_output = model((i_input_scalars, i_input_time_series)).permute(0,2,1)
             
             loss = ((i_output - i_target)**2).mean()
             
@@ -56,19 +56,20 @@ def main():
     
     dataloader = DataLoader(dataset, shuffle=True, batch_size=batch_size)
     
-    sample_input, sample_target = dataset[0]
+    sample_input_scalars, sample_input_time_series, sample_target = dataset[0]
     
-    sample_input = sample_input.unsqueeze(0)
+    sample_input_scalars = sample_input_scalars.unsqueeze(0)
+    sample_input_time_series = sample_input_time_series.unsqueeze(0)
     sample_target = sample_target.unsqueeze(0).permute(0,2,1)
     
     n_inputs, n_targets = dataset.get_num_features()
     model = KineticsLSTM(n_inputs,n_targets)
     
-    output_untrained = model(sample_input).detach()
+    output_untrained = model((sample_input_scalars, sample_input_time_series)).detach()
     
     train(model=model, data_loader=dataloader, n_epochs=max_epochs, threshold=training_threshold, lr=learning_rate)
 
-    output_trained = model(sample_input).detach()
+    output_trained = model((sample_input_scalars, sample_input_time_series)).detach()
 
     loss_untrained = ((sample_target-output_untrained)**2).mean()
     loss_trained = ((sample_target-output_trained)**2).mean()

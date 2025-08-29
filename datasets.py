@@ -2,30 +2,28 @@ import torch
 from torch.utils.data import Dataset
 import pandas as pd
 
-from options import rng_seed
-
 class CustomTimeSeriesDataset(Dataset):
     
     def __init__(self,file):
         df = pd.read_csv(file)
-        print(df)
+        print(f'Loaded DataFrame: {df}')
         
         self.__process_scalar_data(df)
         self.__process_metadata(df)
-        #self.__process_time_series_data(df)
-        
-        self.get_split_indices()
+        self.__process_time_series_data(df)
         
     def __len__(self):
         return self.num_rows
         
     def __getitem__(self,idx):
-        sample_input = self.inputs[idx,:,:]
-        sample_target = self.targets[idx,:,:]
-        return sample_input, sample_target
+        sample_input_scalars = self.input_scalars[idx,:]
+        sample_input_time_series = self.input_time_series[idx,:,:]
+        sample_target_time_series = self.target_time_series[idx,:,:]
+        return sample_input_scalars, sample_input_time_series, sample_target_time_series
     
     # get indices that are split according to a given list of fractions, while making sure no data rows of the same subject are placed in different subsets
-    def get_split_indices(self, fractions=(70,20,10), generator=torch.Generator().manual_seed(rng_seed)):
+    # note that all subjects in this context are also from different datasets (ensured through a "subject identifier" that contains the name of the dataset), i.e., if dataset A and dataset B both have a subject called "Subject1", then the code will not be tricked because the subject identifiers will be "A_Subject1" and "B_Subject1"
+    def get_split_indices(self, fractions=(70,20,10)):
         
         # inner function for inserting indices into a subset; because this is used in two different points in the outer function, we'll just define it once here
         def populate(target_index):
@@ -45,7 +43,7 @@ class CustomTimeSeriesDataset(Dataset):
         # for each subject in a random order, place the trials of that subject in a subset, filling each subset one at a time
         n_subjects = len(self.unique_subject_ids)
         # shuffle the indices randomly so we don't go through the subjects in order
-        idx_shuffled = torch.randperm(n_subjects, generator=generator)
+        idx_shuffled = torch.randperm(n_subjects)
         for i in idx_shuffled:
             # get the unique identifier of the current subject
             current_subject = self.unique_subject_ids[i]
@@ -75,8 +73,8 @@ class CustomTimeSeriesDataset(Dataset):
     
     # get the number of features (input and target vectors) as a 2-element tuple
     def get_num_features(self):
-        n_input_features = len(self.inputs[0,:,0])
-        n_target_features = len(self.targets[0,:,0])
+        n_input_features = len(self.input_time_series[0,:,0])
+        n_target_features = len(self.target_time_series[0,:,0])
         return n_input_features, n_target_features
     
     # process information like dataset name
@@ -96,26 +94,24 @@ class CustomTimeSeriesDataset(Dataset):
         # store the number of rows
         self.num_rows = len(data_frame.index)
         
+        # process subject demographics
+        body_mass = self.__series_to_tensor(data_frame['body_mass'])
+        body_height = torch.tensor(self.__convert_height_to_meters(data_frame['body_height']))
+        age = self.__series_to_tensor(data_frame['age'])
+        sex = self.__map_sex_to_binary(data_frame['sex'])
         
-        self.body_mass = self.__series_to_tensor(data_frame['body_mass'])
-        self.body_height = torch.tensor(self.__convert_height_to_meters(data_frame['body_height']))
-        self.sex = self.__map_sex_to_binary(data_frame['sex'])
-        self.age = self.__series_to_tensor(data_frame['age'])
+        # process gait info
+        gait_speed = self.__series_to_tensor(data_frame['gait_speed'])
+        gait_cycle_duration = self.__series_to_tensor(data_frame['gait_cycle_duration'])
         
-        self.gait_speed = self.__series_to_tensor(data_frame['gait_speed'])
-        self.gait_cycle_duration = self.__series_to_tensor(data_frame['gait_cycle_duration'])
-        
-        print(f'Body mass: {self.body_mass}')
-        print(f'Body height: {self.body_height}')
-        print(f'Sex: {self.sex}')
+        self.input_scalars = torch.cat((body_mass.unsqueeze(1), body_height.unsqueeze(1), age.unsqueeze(1), sex.unsqueeze(1)), 1)
+        print(f'Scalar inputs: {self.input_scalars}')
     
     # process all time series format data like input kinematics and output kinetics
     def __process_time_series_data(self,data_frame):
         unique_cols = self.__find_unique_column_labels(data_frame)
-        print(unique_cols)
         
         data = self.__time_series_data_to_tensor(data_frame,unique_cols)
-        print(data)
         
         idx_jointangles = []
         idx_jointmoments = []
@@ -125,12 +121,12 @@ class CustomTimeSeriesDataset(Dataset):
             elif '_jointmoments_' in unique_cols[i_col]:
                 idx_jointmoments.append(i_col)
             
-        print(f'Idx of joint angles: {idx_jointangles}')
-        print(f'Idx of joint moments: {idx_jointmoments}')
+        print(f'Index of joint angles: {idx_jointangles}')
+        print(f'Index of joint moments: {idx_jointmoments}')
         
         # split the data tensor to inputs and targets knowing that the first 12 labels are for joint kinematics (inputs) and the remaining 9 for joint moments (targets)
-        self.inputs = data[:,idx_jointangles,:]
-        self.targets = data[:,idx_jointmoments,:]
+        self.input_time_series = data[:,idx_jointangles,:]
+        self.target_time_series = data[:,idx_jointmoments,:]
 
     # get a list of unique column labels of time series variables
     def __find_unique_column_labels(self, dataframe):
@@ -151,7 +147,6 @@ class CustomTimeSeriesDataset(Dataset):
         # read all time series data into a tensor
         data = torch.empty(len(dataframe.index), len(unique_cols), 101)
         for s in range(len(dataframe.index)):
-            #print(s)
             for i_col in range(len(unique_cols)):
                 for i in range(0,101):
                     current_col = unique_cols[i_col] + '_' + str(i+1)
