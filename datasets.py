@@ -8,6 +8,7 @@ class CustomTimeSeriesDataset(Dataset):
         df = pd.read_csv(file)
         print(f'Loaded DataFrame: {df}')
         
+        self.angles_in_radians = True
         self.__process_scalar_data(df)
         self.__process_metadata(df)
         self.__process_time_series_data(df)
@@ -109,6 +110,8 @@ class CustomTimeSeriesDataset(Dataset):
     
     # process all time series format data like input kinematics and output kinetics
     def __process_time_series_data(self,data_frame):
+        
+        
         unique_cols = self.__find_unique_column_labels(data_frame)
         
         data = self.__time_series_data_to_tensor(data_frame,unique_cols)
@@ -125,7 +128,11 @@ class CustomTimeSeriesDataset(Dataset):
         print(f'Index of joint moments: {idx_jointmoments}')
         
         # split the data tensor to inputs and targets knowing that the first 12 labels are for joint kinematics (inputs) and the remaining 9 for joint moments (targets)
-        self.input_time_series = data[:,idx_jointangles,:]
+        # convert kinematics time series from degrees to radians, which sort of normalizes the data
+        if self.angles_in_radians:
+            self.input_time_series = torch.deg2rad(data[:,idx_jointangles,:])
+        else:
+            self.input_time_series = data[:,idx_jointangles,:]
         self.target_time_series = data[:,idx_jointmoments,:]
 
     # get a list of unique column labels of time series variables

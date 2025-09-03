@@ -4,7 +4,89 @@ import torch.nn.functional as F
 
 from options import lstm_hidden_size, lstm_num_layers, lstm_bidirectional
 
-# a network that maps input kinematic time series to output kinetic time series
+# various network architectures that map input kinematic time series to output kinetic time series
+
+# standard feedforward neural network, doesn't perform well
+class FFN(nn.Module):
+    def __init__(self, num_input_vectors, num_output_vectors):
+        super().__init__()
+        
+        self.num_output_vectors = num_output_vectors
+        
+        self.fc1 = nn.Linear(num_input_vectors*101, 1024)
+        self.fc2 = nn.Linear(1024,num_output_vectors*101)
+        self.flattener = nn.Flatten()
+        
+    def forward(self,inputs):
+        
+        scalars, time_series = inputs
+        batch_size = scalars.shape[0]
+        
+        x = self.flattener(time_series)
+        x = self.fc1(x)
+        x = F.sigmoid(x)
+        x = self.fc2(x)
+        
+        prediction = x.reshape(batch_size,101,self.num_output_vectors)
+                
+        return prediction
+
+# convolutional neural network, performs alright when kernel size is 1 and worse otherwise
+class CNN(nn.Module):
+    def __init__(self, num_input_vectors, num_output_vectors):
+        super().__init__()
+        
+        self.c1 = nn.Conv1d(
+            in_channels=num_input_vectors,
+            out_channels=num_output_vectors,
+            kernel_size=1,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
+        )
+        
+    def forward(self, inputs):
+        scalars, time_series = inputs
+        batch_size = scalars.shape[0]
+        
+        x = self.c1(time_series)
+        x = x.permute(0,2,1)
+        return x
+        
+
+# gated recurrent unit network
+class KineticsGRU(nn.Module):
+    def __init__(self, num_input_vectors, num_output_vectors):
+        super().__init__()
+        
+        self.gru = nn.GRU(
+            input_size=num_input_vectors,
+            hidden_size=num_output_vectors,
+            batch_first=True,
+            num_layers=4,
+            bidirectional=lstm_bidirectional
+        )
+        
+        # see explanation in forward()
+        self.coefficient = nn.Parameter(torch.rand((1), requires_grad=True), requires_grad=True)
+        
+    def forward(self,inputs):
+        
+        scalars, time_series = inputs
+        
+        # transform to the correct format that is defined by making batch_first=True in the LSTM constructor
+        time_series_trans = time_series.permute(0,2,1)
+                
+        # pass the transposed input to the LSTM
+        gru_out, temp = self.gru(time_series_trans)
+        # lstm_out now contains the short-term memory values from each unrolled LSTM unit
+        
+        # we multiply all output values by a scalar coefficient to allow the prediction to match target values above 1 or below -1, in case the output of the main architecture returns values constrained to the range [-1,1]
+        prediction = gru_out*self.coefficient
+        return prediction
+
+# long short-term memory network
 class KineticsLSTM(nn.Module):
     def __init__(self, num_input_vectors, num_output_vectors):
         super().__init__()
@@ -13,7 +95,8 @@ class KineticsLSTM(nn.Module):
             input_size=num_input_vectors,
             hidden_size=lstm_hidden_size,
             proj_size=num_output_vectors,
-            batch_first=True, num_layers=lstm_num_layers,
+            batch_first=True,
+            num_layers=lstm_num_layers,
             bidirectional=lstm_bidirectional
         )
         
@@ -31,7 +114,7 @@ class KineticsLSTM(nn.Module):
         prediction = lstm_out
         return prediction
 
-# a network that maps input demographic scalars and kinematic time series to output kinetic time series
+# LSTM with demographic scalars
 class DemographicKineticsLSTM(nn.Module):
     """
     The idea here is that unlike KineticsLSTM, this network incorporates information about scalar variables (mass, height, age, sex).
@@ -54,16 +137,14 @@ class DemographicKineticsLSTM(nn.Module):
             num_layers=lstm_num_layers,
             bidirectional=lstm_bidirectional
         )
-        #self.fc1 = nn.Linear(4,256)
-        #self.fc2 = nn.Linear(256,101*num_output_vectors)
+        self.fc = nn.Linear(4,num_output_vectors)
         
-
         
-        self.polynomial_degree = 0
+        #self.polynomial_degree = 1
         self.num_output_vectors = num_output_vectors
         
-        self.fc1 = nn.Linear(4,16)
-        self.fc2 = nn.Linear(16,(self.polynomial_degree+1)*num_output_vectors)
+        #self.fc1 = nn.Linear(4,16)
+        #self.fc2 = nn.Linear(16,(self.polynomial_degree+1)*num_output_vectors)
         
     def forward(self,inputs):
         
@@ -74,41 +155,39 @@ class DemographicKineticsLSTM(nn.Module):
         # transform to the correct format that is defined by making batch_first=True in the LSTM constructor
         time_series_trans = time_series.permute(0,2,1)
         
-        #x = self.fc1(scalars)
-        #x = F.sigmoid(x)
-        #x = self.fc2(x)
-        #x = F.sigmoid(x)
-        
-        # DIMC_COEFFS = (BATCH, POLYDEGREE, NUM_VECTORS=9)
-        # DIM_Y = (BATCH, TIMEPOINTS=101, NUM_VECTORS=9)
-        
-        x = self.fc1(scalars)
-        x = F.sigmoid(x)
-        x = self.fc2(x)
-        x = F.sigmoid(x)
-        coefficients = x.reshape(batch_size, self.polynomial_degree+1, self.num_output_vectors)
-        #print(f'shape of coefficients: {coefficients.shape}')
-        #print(f'shape of single degree coefficients: {coefficients[:,0,:].shape}')
-        
-        y = torch.zeros((batch_size, 101, self.num_output_vectors))
-        
-        #y += coefficients[:,0,:].reshape(batch_size, 1, self.num_output_vectors) * torch.ones((batch_size, 101, self.num_output_vectors))
-        for i in range(self.polynomial_degree+1):
-            #print(f'shape of y: {y.shape}')
-            #print(f'shape of current coeffs: {self.coeffs[:,i].shape}')
-            y += coefficients[:,i,:].reshape(batch_size, 1, self.num_output_vectors) * (torch.arange(1,102)**i).reshape(1,101,1).repeat(batch_size, 1, self.num_output_vectors)
-            
-        #print(f'shape of y: {y.shape}')
-        
         # pass the transposed input to the LSTM
         lstm_out, temp = self.lstm(time_series_trans)
         # lstm_out now contains the short-term memory values from each unrolled LSTM unit
         
-        #x = x.reshape(lstm_out.shape)
-        #output_scaled = (x*lstm_out)
+        x = self.fc(scalars)
+        x = F.sigmoid(x)
+        #print(f'shape of x: {x.shape}')
+        x = x.unsqueeze(1)
+        #print(f'shape of x: {x.shape}')
+        #x = x.repeat(1,101,1)
+        #print(f'shape of x: {x.shape}')
+        
+        
+        # DIMC_COEFFS = (BATCH, POLYDEGREE, NUM_VECTORS=9)
+        # DIM_Y = (BATCH, TIMEPOINTS=101, NUM_VECTORS=9)
+        
+        # polynomial construction
+        #x = self.fc1(scalars)
+        #x = F.sigmoid(x)
+        #x = self.fc2(x)
+        #x = F.sigmoid(x)
+        #coefficients = x.reshape(batch_size, self.polynomial_degree+1, self.num_output_vectors)
+        #y = torch.zeros((batch_size, 101, self.num_output_vectors))
+        #for i in range(self.polynomial_degree+1):
+        #    y += coefficients[:,i,:].reshape(batch_size, 1, self.num_output_vectors) * (torch.arange(1,102)**i).reshape(1,101,1).repeat(batch_size, 1, self.num_output_vectors)
+            
+        
+        
         #print(f'shape of lstm_out: {lstm_out.shape}')
         
-        output_scaled = lstm_out+y
+        output_scaled = lstm_out+x
+        
+        #print(f'shape of output: {output_scaled.shape}')
         
         prediction = output_scaled
         return prediction
