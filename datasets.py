@@ -1,4 +1,5 @@
 import torch
+import copy
 from torch.utils.data import Dataset
 import pandas as pd
 
@@ -22,6 +23,34 @@ class CustomTimeSeriesDataset(Dataset):
         sample_target_time_series = self.target_time_series[idx,:,:]
         return sample_input_scalars, sample_input_time_series, sample_target_time_series
     
+    def subset(self,idx_list):
+        idx_list.sort()
+        idx = torch.tensor(idx_list)
+        subset = copy.deepcopy(self)
+        subset.num_rows = len(idx_list)
+        subset.angles_in_radians = self.angles_in_radians
+        subset.dataset_name = [self.dataset_name[x] for x in idx_list]
+        # scalar inputs
+        subset.input_scalars = self.input_scalars[idx,:]
+        # subject identifiers
+        subset.subject_ids = [self.subject_ids[x] for x in idx_list]
+        subset.unique_subject_ids = list(set(subset.subject_ids))
+        subset.unique_subject_ids.sort()
+        # time series
+        subset.input_time_series = self.input_time_series[idx]
+        subset.target_time_series = self.target_time_series[idx]
+        return subset
+        
+    
+    def kfold(self,k):
+        fractions = [1 for x in range(k)]
+        idxs = self.get_split_indices(fractions)
+        #subsets = []
+        #for i in range(k):
+        #    subsets.append(self[idxs[i]])
+        return idxs
+    
+    
     # get indices that are split according to a given list of fractions, while making sure no data rows of the same subject are placed in different subsets
     # note that all subjects in this context are also from different datasets (ensured through a "subject identifier" that contains the name of the dataset), i.e., if dataset A and dataset B both have a subject called "Subject1", then the code will not be tricked because the subject identifiers will be "A_Subject1" and "B_Subject1"
     def get_split_indices(self, fractions=(70,20,10)):
@@ -32,8 +61,9 @@ class CustomTimeSeriesDataset(Dataset):
             nonlocal subset_sizes
             nonlocal subset_indices
             subset_sizes[target_index] += n_selected_rows
-            for row in idx_rows:
-                subset_indices[target_index].append(row)
+            for row in range(len(idx_rows)):
+                if idx_rows[row]:
+                    subset_indices[target_index].append(row)
         
         # calculate normalized fractions in case the user gives the fractions as percentage points or another format that doesn't add up to 1.0
         fractions_normalized = [float(x)/sum(fractions) for x in fractions]
@@ -67,6 +97,8 @@ class CustomTimeSeriesDataset(Dataset):
                 occupation = [float(x)/self.num_rows*fractions_normalized[j] for x in subset_sizes]
                 idx_min = torch.argmin(torch.tensor(occupation))
                 populate(idx_min)
+        
+        [x.sort() for x in subset_indices]
         
         print(f'Final subset sizes: {subset_sizes}')
         print(f'Fractions of the final subset sizes: {[round(float(x)/sum(subset_sizes),2) for x in subset_sizes]}')

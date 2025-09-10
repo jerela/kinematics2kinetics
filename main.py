@@ -2,36 +2,44 @@ import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
 from datasets import CustomTimeSeriesDataset
 from networks import KineticsLSTM, DemographicKineticsLSTM, FFN, CNN, KineticsGRU
 from visualization import Plotter
 
-from options import rng_seed, batch_size, training_threshold, max_epochs, file_dataset, lr_initial, lr_gamma, lr_step_size
+from options import rng_seed, batch_size, training_threshold, max_epochs, file_dataset, lr_initial, lr_gamma, lr_step_size, plot_losses
 
 torch.manual_seed(rng_seed)
 
 def loss_fn(predicted, target):
     return ((predicted - target)**2).mean()
 
-def train(model, data_set, n_epochs = 100, lr = 0.01, threshold = 1e-5, plot=True):
+def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, threshold = 25, plot_losses=False, plot_sample=False):
     
     # construct DataLoader
-    data_loader = DataLoader(data_set, shuffle=True, batch_size=batch_size)
+    data_loader_training = DataLoader(training_set, shuffle=True, batch_size=batch_size)
+    if validation_set:
+        data_loader_validation = DataLoader(validation_set, shuffle=True, batch_size=batch_size)
+    else:
+        print('Validation set is not set, treating training loss also as validation loss.')
     
     # select optimizer and learning rate
     optimizer = Adam(model.parameters(), lr=lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10, threshold=1e-4, min_lr=1e-9)
     
     # keep track of previous total loss so we know to break out of the epoch loop if total loss doesn't change between epochs
-    previous_total_loss = 0.0
+    previous_validation_loss = 0.0
+    
+    # lists to track training and validation losses per epoch
+    losses_training = []
+    losses_validation = []
     
     best_loss = float('inf')
     best_epoch = 0
     
-    if plot:
-        sample_input_scalars, sample_input_time_series, sample_target = data_set[0]
+    if plot_sample:
+        sample_input_scalars, sample_input_time_series, sample_target = validation_set[0]
         sample_input_scalars = sample_input_scalars.unsqueeze(0)
         sample_input_time_series = sample_input_time_series.unsqueeze(0)
         sample_target = sample_target.unsqueeze(0).permute(0,2,1)
@@ -39,51 +47,74 @@ def train(model, data_set, n_epochs = 100, lr = 0.01, threshold = 1e-5, plot=Tru
         loss_untrained = loss_fn(sample_target,output_untrained)
         plotter = Plotter()
 
+    if plot_losses:
+        loss_plotter = Plotter()
         
     # iterate through epochs, n_epochs is the maximum number of epochs allowed
     for epoch in range(n_epochs):
-        total_loss = 0.0
         
-        for i_input_scalars, i_input_time_series, i_target in data_loader:
+        # set the model to training mode
+        model.train(True)
+        
+        training_loss = 0.0
+        
+        for i_input_scalars, i_input_time_series, i_target in data_loader_training:
             i_output = model((i_input_scalars, i_input_time_series)).permute(0,2,1)
             
             loss = loss_fn(i_output,i_target)
             
             loss.backward()
             
-            total_loss += loss
+            training_loss += loss
             
         
-        print(f'Epoch: {str(epoch+1)}, final loss: {total_loss}, learning rate: {scheduler.get_last_lr()}')
         
-        if plot:
-            
+        
+        # next, we do validation and set the model to evaluation mode for that
+        if validation_set:
+            model.eval()
+            validation_loss = 0.0
+            with torch.no_grad():
+                for i_input_scalars, i_input_time_series, i_target in data_loader_validation:
+                    i_output = model((i_input_scalars, i_input_time_series)).permute(0,2,1)
+                
+                    loss = loss_fn(i_output,i_target)
+                    validation_loss += loss
+        else:
+            validation_loss = training_loss
+        
+        print(f'Epoch: {str(epoch+1)}, training loss: {training_loss:.5f}, validation loss: {validation_loss:.5f}, learning rate: {scheduler.get_last_lr()}')
+        losses_training.append(training_loss.detach())
+        losses_validation.append(validation_loss.detach())
+        
+        if plot_losses:
+            plottable_titles = ('training loss', 'validation loss')
+            loss_plotter.plot_losses((losses_training, losses_validation), plottable_titles)
+        
+        if plot_sample:
             output_trained = model((sample_input_scalars, sample_input_time_series)).detach()
             loss_trained = loss_fn(sample_target,output_trained)
             plottable_data = (sample_target.detach().squeeze(0), output_untrained.squeeze(0), output_trained.squeeze(0))
             plottable_titles = ('target', 'untrained prediction', 'trained prediction')
-            plotter.plot(plottable_data, plottable_titles)
-        
-        
-        if abs(total_loss-previous_total_loss) < threshold:
-            print(f'Breaking because threshold loss was subceeded. Steps taken: {str(epoch+1)}')
-            break
-            
-        if total_loss < best_loss:
-            best_loss = total_loss
+            plotter.plot_samples(plottable_data, plottable_titles)
+
+        if validation_loss < best_loss:
+            best_loss = validation_loss
             best_epoch = epoch
-        elif epoch > best_epoch+100:
-            print(f'Breaking because loss has not reached a new minimum in 100 epochs. Steps taken: {str(epoch+1)}')
+        elif epoch > best_epoch+threshold:
+            print(f'Breaking because validation loss has not reached a new minimum in {threshold} epochs. Steps taken: {epoch+1}')
             break
         
-        previous_total_loss = total_loss
+        previous_validation_loss = validation_loss
         
+        
+        model.train(True)
         optimizer.step()
         optimizer.zero_grad()
-        scheduler.step(total_loss)
+        scheduler.step(training_loss)
         
         
-    
+    return (training_loss.detach(), validation_loss.detach())
 
 
 def main():
@@ -97,8 +128,26 @@ def main():
     #model = CNN(n_inputs,n_targets)
     model = KineticsGRU(n_inputs,n_targets)
     
-    
-    train(model=model, data_set=dataset, n_epochs=max_epochs, threshold=training_threshold, lr=lr_initial)
+    k = 5
+    idxs = dataset.kfold(k)
+    losses = []
+    for i in range(k):
+        print(f'- - - FOLD {i+1} - - -')
+        print(f'Dataset length: {len(dataset)}, numbers of indices: {len(idxs[i])}')
+        idx_training = []
+        idx_validation = []
+        for j in range(k):
+            if i == j:
+                idx_validation = idxs[i]
+            else:
+                idx_training = idx_training + idxs[j]
+        training_set = dataset.subset(idx_training)
+        validation_set = dataset.subset(idx_validation)
+        training_loss, validation_loss = train(model=model, training_set=training_set, validation_set=validation_set, n_epochs=max_epochs, threshold=training_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=False)
+        losses.append(validation_loss)
+        
+        
+    print(f'Losses: {losses}')
 
     
     
