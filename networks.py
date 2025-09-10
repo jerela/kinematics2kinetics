@@ -57,14 +57,14 @@ class CNN(nn.Module):
 
 # gated recurrent unit network
 class KineticsGRU(nn.Module):
-    def __init__(self, num_input_vectors, num_output_vectors):
+    def __init__(self, num_input_vectors, num_output_vectors, num_layers):
         super().__init__()
         
         self.gru = nn.GRU(
             input_size=num_input_vectors,
             hidden_size=num_output_vectors,
             batch_first=True,
-            num_layers=4,
+            num_layers=num_layers,#4,
             bidirectional=lstm_bidirectional
         )
         

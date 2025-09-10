@@ -4,8 +4,8 @@ file_dataset='C:/Users/lavik/OneDrive/Documents/Lencioni/processed_data.csv'
 
 # training settings
 batch_size=200
-training_threshold=25
-max_epochs=200
+early_stopping_threshold=25
+max_epochs=400
 
 # network structure settings
 lstm_hidden_size=128
