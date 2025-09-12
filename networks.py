@@ -4,17 +4,46 @@ import torch.nn.functional as F
 
 from options import lstm_hidden_size, lstm_num_layers, lstm_bidirectional
 
+# mean square error function that puts less emphasis on values at the beginning and the end of the time series, to account for the high simulation nose in the beginning and end of contact force time series
+class WeightedMSELoss(nn.Module):
+    def __init__(self, length):
+        super().__init__()
+        
+        weights = torch.ones(length)
+        
+        # threshold controls the fraction of the total sequence length (at the beginning and the end of the sequence) that has reduced emphasis
+        threshold = 0.05
+        
+        # weight is 0 at the edges of the sequence, increases linearly to 1 over a distance of one threshold from the edge
+        for x, weight in enumerate(weights):
+            if float(x) <= threshold*length:
+                x_local = float(x)
+                weight = x_local / (threshold*length)
+            elif float(x) >= (1.0-threshold)*length:
+                x_local = (float(x)-length) 
+                weight = -x_local / (threshold*length)
+            weights[x] = weight
+        self.weights = weights
+        print(f'Weights: {self.weights}')
+        
+        
+    def forward(self, inputs, targets):
+        return torch.mean( ((inputs-targets)**2) * self.weights )
+
+
 # various network architectures that map input kinematic time series to output kinetic time series
 
 # standard feedforward neural network, doesn't perform well
-class FFN(nn.Module):
-    def __init__(self, num_input_vectors, num_output_vectors):
+class KineticsFFN(nn.Module):
+    def __init__(self, num_input_vectors, num_output_vectors, len_sequence):
         super().__init__()
+        
+        self.sequence_length = len_sequence
         
         self.num_output_vectors = num_output_vectors
         
-        self.fc1 = nn.Linear(num_input_vectors*101, 1024)
-        self.fc2 = nn.Linear(1024,num_output_vectors*101)
+        self.fc1 = nn.Linear(num_input_vectors*self.sequence_length, num_output_vectors*self.sequence_length)
+        self.fc2 = nn.Linear(1024, num_output_vectors*self.sequence_length)
         self.flattener = nn.Flatten()
         
     def forward(self,inputs):
@@ -26,13 +55,14 @@ class FFN(nn.Module):
         x = self.fc1(x)
         x = F.sigmoid(x)
         x = self.fc2(x)
+        x = F.relu(x)
         
-        prediction = x.reshape(batch_size,101,self.num_output_vectors)
+        prediction = x.reshape(batch_size,self.sequence_length,self.num_output_vectors)
                 
         return prediction
 
 # convolutional neural network, performs alright when kernel size is 1 and worse otherwise
-class CNN(nn.Module):
+class KineticsCNN(nn.Module):
     def __init__(self, num_input_vectors, num_output_vectors):
         super().__init__()
         
@@ -69,7 +99,7 @@ class KineticsGRU(nn.Module):
         )
         
         # see explanation in forward()
-        self.coefficient = nn.Parameter(torch.rand((1), requires_grad=True), requires_grad=True)
+        #self.coefficient = nn.Parameter(torch.rand((1), requires_grad=True), requires_grad=True)
         
     def forward(self,inputs):
         
@@ -83,7 +113,7 @@ class KineticsGRU(nn.Module):
         # lstm_out now contains the short-term memory values from each unrolled LSTM unit
         
         # we multiply all output values by a scalar coefficient to allow the prediction to match target values above 1 or below -1, in case the output of the main architecture returns values constrained to the range [-1,1]
-        prediction = gru_out*self.coefficient
+        prediction = gru_out#*self.coefficient
         return prediction
 
 # long short-term memory network

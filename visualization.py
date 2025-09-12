@@ -3,9 +3,14 @@ import matplotlib.pyplot as plt
 
 class Plotter():
     
-    def __init__(self):
+    def __init__(self, sequence_length=None):
         plt.ion()
         self.fig = plt.figure()
+        # if sequence length is not specified, we assume there are 101 data points in a single sequence
+        if sequence_length is None:
+            self.xlim = (1, 101)
+        else:
+            self.xlim = (1, sequence_length)
         
     def plot_losses(self, losses, titles):
         n = len(losses)
@@ -23,7 +28,7 @@ class Plotter():
             self.fig.add_subplot(1, n, i+1)
             plt.plot(data[i])
             plt.title(titles[i])
-            plt.axis([1, 101, -1.5, 1.5])
+            plt.axis([self.xlim[0], self.xlim[1], -1.0, 1.0])
         self.fig.canvas.draw_idle()
         self.fig.canvas.flush_events()
         

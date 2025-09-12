@@ -7,28 +7,33 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, Subset
 
 from datasets import CustomTimeSeriesDataset
-from networks import KineticsLSTM, DemographicKineticsLSTM, FFN, CNN, KineticsGRU
+from networks import KineticsLSTM, DemographicKineticsLSTM, KineticsFFN, KineticsCNN, KineticsGRU, WeightedMSELoss
 from visualization import Plotter
 
-from options import rng_seed, batch_size, early_stopping_threshold, max_epochs, file_dataset, lr_initial, lr_gamma, lr_step_size, plot_losses
+from options import rng_seed, batch_size, early_stopping_threshold, max_epochs, file_dataset, lr_initial, plot_losses, plot_sample, workers
 
 torch.manual_seed(rng_seed)
 
-def loss_fn(predicted, target):
-    return ((predicted - target)**2).mean()
+
+#def loss_fn(predicted, target):
+#    return ((predicted - target)**2).mean()
 
 def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, early_stopping = 25, plot_losses=False, plot_sample=False):
     
+    loss_fn = WeightedMSELoss(length=training_set.get_sequence_length())
+    
     # construct DataLoader
-    data_loader_training = DataLoader(training_set, shuffle=True, batch_size=batch_size)
+    data_loader_training = DataLoader(training_set, shuffle=True, batch_size=batch_size, num_workers=workers)
     if validation_set:
-        data_loader_validation = DataLoader(validation_set, shuffle=True, batch_size=batch_size)
+        data_loader_validation = DataLoader(validation_set, shuffle=True, batch_size=batch_size, num_workers=workers)
+        sample_set = validation_set
     else:
+        sample_set = training_set
         print('Validation set is not set, treating training loss also as validation loss.')
     
     # select optimizer and learning rate
     optimizer = Adam(model.parameters(), lr=lr)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10, threshold=1e-4, min_lr=1e-9)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=20, threshold=1e-4, min_lr=1e-9)
     
     # keep track of previous total loss so we know to break out of the epoch loop if total loss doesn't change between epochs
     previous_validation_loss = 0.0
@@ -41,13 +46,13 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
     best_epoch = 0
     
     if plot_sample:
-        sample_input_scalars, sample_input_time_series, sample_target = validation_set[0]
+        sample_input_scalars, sample_input_time_series, sample_target = sample_set[0]
         sample_input_scalars = sample_input_scalars.unsqueeze(0)
         sample_input_time_series = sample_input_time_series.unsqueeze(0)
         sample_target = sample_target.unsqueeze(0).permute(0,2,1)
         output_untrained = model((sample_input_scalars, sample_input_time_series)).detach()
         loss_untrained = loss_fn(sample_target,output_untrained)
-        plotter = Plotter()
+        plotter = Plotter(training_set.get_sequence_length())
 
     if plot_losses:
         loss_plotter = Plotter()
@@ -92,11 +97,13 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
             loss_plotter.plot_losses((losses_training, losses_validation), plottable_titles)
         
         if plot_sample:
-            output_trained = model((sample_input_scalars, sample_input_time_series)).detach()
-            loss_trained = loss_fn(sample_target,output_trained)
-            plottable_data = (sample_target.detach().squeeze(0), output_untrained.squeeze(0), output_trained.squeeze(0))
-            plottable_titles = ('target', 'untrained prediction', 'trained prediction')
-            plotter.plot_samples(plottable_data, plottable_titles)
+            model.eval()
+            with torch.no_grad():
+                output_trained = model((sample_input_scalars, sample_input_time_series)).detach()
+                loss_trained = loss_fn(sample_target,output_trained)
+                plottable_data = (sample_target.detach().squeeze(0), output_untrained.squeeze(0), output_trained.squeeze(0))
+                plottable_titles = ('target', 'untrained prediction', 'trained prediction')
+                plotter.plot_samples(plottable_data, plottable_titles)
 
         # early stopping
         if validation_loss < best_loss:
@@ -111,23 +118,18 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
         # set the model back to training mode, update the weights, reset the gradient and check if learning rate needs to be reduced
         model.train(True)
         optimizer.step()
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True)
         scheduler.step(training_loss)
         
         
     return (training_loss.detach(), validation_loss.detach())
 
 
-def main():
+def run_kfold():
     
     dataset = CustomTimeSeriesDataset(file_dataset)
     
-    
-    
     n_inputs, n_targets = dataset.get_num_features()
-    #model = KineticsLSTM(n_inputs,n_targets)
-    #model = CNN(n_inputs,n_targets)
-    #model = KineticsGRU(n_inputs,n_targets)
     
     k = 5
     idxs = dataset.kfold(k)
@@ -157,7 +159,7 @@ def main():
                     idx_training = idx_training + idxs[j]
             training_set = dataset.subset(idx_training)
             validation_set = dataset.subset(idx_validation)
-            training_loss, validation_loss = train(model=model, training_set=training_set, validation_set=validation_set, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=False)
+            training_loss, validation_loss = train(model=model, training_set=training_set, validation_set=validation_set, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
             losses.append(validation_loss)
             
             
@@ -176,6 +178,22 @@ def main():
             min_idx = i
     print(f'Smallest loss of {min_loss} at {layers[min_idx]} layers.')
 
+def main():
+    
+    dataset = CustomTimeSeriesDataset(file_dataset)
+    
+    n_inputs, n_targets = dataset.get_num_features()
+    #model = KineticsLSTM(n_inputs,n_targets)
+    #model = CNN(n_inputs,n_targets)
+    #model = KineticsGRU(n_inputs,n_targets)
+    
+    num_layers = 4
+    #model = KineticsGRU(n_inputs,n_targets,num_layers)
+    model = KineticsLSTM(n_inputs,n_targets)
+    #model = KineticsCNN(n_inputs,n_targets)
+    #model = KineticsFFN(n_inputs,n_targets, dataset.get_sequence_length())
+    training_loss, validation_loss = train(model=model, training_set=dataset, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
+    
     
     
 
