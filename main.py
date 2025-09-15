@@ -1,4 +1,6 @@
 import statistics
+import os
+import copy
 
 import torch
 import torch.nn.functional as F
@@ -10,13 +12,18 @@ from datasets import CustomTimeSeriesDataset
 from networks import KineticsLSTM, DemographicKineticsLSTM, KineticsFFN, KineticsCNN, KineticsGRU, WeightedMSELoss
 from visualization import Plotter
 
-from options import rng_seed, batch_size, early_stopping_threshold, max_epochs, file_dataset, lr_initial, plot_losses, plot_sample, workers
+from options import rng_seed, batch_size, early_stopping_threshold, max_epochs, file_dataset, lr_initial, plot_losses, plot_sample, workers, path_output
 
 torch.manual_seed(rng_seed)
 
 
 #def loss_fn(predicted, target):
 #    return ((predicted - target)**2).mean()
+
+def save_checkpoint(checkpoint,name):
+    full_path = os.path.join(path_output, f'checkpoint_{name}.pt')
+    torch.save(checkpoint, full_path)
+
 
 def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, early_stopping = 25, plot_losses=False, plot_sample=False):
     
@@ -109,6 +116,8 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
         if validation_loss < best_loss:
             best_loss = validation_loss
             best_epoch = epoch
+            # we must take a deep copy of the model state_dict or it'll change whenever model is updated
+            model_state_dict_at_best_loss = copy.deepcopy(model.state_dict())
         elif epoch > best_epoch+early_stopping:
             print(f'Breaking because validation loss has not reached a new minimum in {early_stopping} epochs. Steps taken: {epoch+1}')
             break
@@ -122,7 +131,32 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
         scheduler.step(training_loss)
         
         
-    return (training_loss.detach(), validation_loss.detach())
+        if epoch%100 == 0:
+            checkpoint = {
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'training_loss': losses_training,
+                'validation_loss': losses_validation,
+                'minimum_loss': best_loss,
+                'epoch_at_minimum_loss': best_epoch,
+                'model_state_dict_at_minimum_loss': model_state_dict_at_best_loss
+            }
+            save_checkpoint(checkpoint, f'{model.model_name}_epoch{epoch}')
+        
+    
+    training_output = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'training_loss': losses_training,
+        'validation_loss': losses_validation,
+        'minimum_loss': best_loss,
+        'epoch_at_minimum_loss': best_epoch,
+        'model_state_dict_at_minimum_loss': model_state_dict_at_best_loss
+    }
+    save_checkpoint(checkpoint, f'{model.model_name}_epoch{epoch}_finished')
+    return training_output
 
 
 def run_kfold():
@@ -159,7 +193,8 @@ def run_kfold():
                     idx_training = idx_training + idxs[j]
             training_set = dataset.subset(idx_training)
             validation_set = dataset.subset(idx_validation)
-            training_loss, validation_loss = train(model=model, training_set=training_set, validation_set=validation_set, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
+            training_output = train(model=model, training_set=training_set, validation_set=validation_set, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
+            validation_loss = training_output['validation_loss'][-1]
             losses.append(validation_loss)
             
             
@@ -178,21 +213,23 @@ def run_kfold():
             min_idx = i
     print(f'Smallest loss of {min_loss} at {layers[min_idx]} layers.')
 
+
 def main():
     
-    dataset = CustomTimeSeriesDataset(file_dataset)
+    run_kfold()
+    #dataset = CustomTimeSeriesDataset(file_dataset)
     
-    n_inputs, n_targets = dataset.get_num_features()
+    #n_inputs, n_targets = dataset.get_num_features()
     #model = KineticsLSTM(n_inputs,n_targets)
     #model = CNN(n_inputs,n_targets)
     #model = KineticsGRU(n_inputs,n_targets)
     
-    num_layers = 4
+    #num_layers = 4
     #model = KineticsGRU(n_inputs,n_targets,num_layers)
-    model = KineticsLSTM(n_inputs,n_targets)
+    #model = KineticsLSTM(n_inputs,n_targets)
     #model = KineticsCNN(n_inputs,n_targets)
     #model = KineticsFFN(n_inputs,n_targets, dataset.get_sequence_length())
-    training_loss, validation_loss = train(model=model, training_set=dataset, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
+    #training_output = train(model=model, training_set=dataset, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
     
     
     

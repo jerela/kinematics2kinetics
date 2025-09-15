@@ -35,8 +35,10 @@ class WeightedMSELoss(nn.Module):
 
 # standard feedforward neural network, doesn't perform well
 class KineticsFFN(nn.Module):
-    def __init__(self, num_input_vectors, num_output_vectors, len_sequence):
+    def __init__(self, num_input_vectors, num_output_vectors, len_sequence, name='KineticsFFN'):
         super().__init__()
+        
+        self.model_name = name
         
         self.sequence_length = len_sequence
         
@@ -63,8 +65,10 @@ class KineticsFFN(nn.Module):
 
 # convolutional neural network, performs alright when kernel size is 1 and worse otherwise
 class KineticsCNN(nn.Module):
-    def __init__(self, num_input_vectors, num_output_vectors):
+    def __init__(self, num_input_vectors, num_output_vectors, name='KineticsCNN'):
         super().__init__()
+        
+        self.model_name = name
         
         self.c1 = nn.Conv1d(
             in_channels=num_input_vectors,
@@ -87,8 +91,10 @@ class KineticsCNN(nn.Module):
 
 # gated recurrent unit network
 class KineticsGRU(nn.Module):
-    def __init__(self, num_input_vectors, num_output_vectors, num_layers):
+    def __init__(self, num_input_vectors, num_output_vectors, num_layers, name='KineticsGRU'):
         super().__init__()
+        
+        self.model_name = name
         
         self.gru = nn.GRU(
             input_size=num_input_vectors,
@@ -118,8 +124,10 @@ class KineticsGRU(nn.Module):
 
 # long short-term memory network
 class KineticsLSTM(nn.Module):
-    def __init__(self, num_input_vectors, num_output_vectors):
+    def __init__(self, num_input_vectors, num_output_vectors, name='KineticsLSTM'):
         super().__init__()
+        
+        self.model_name = name
         
         self.lstm = nn.LSTM(
             input_size=num_input_vectors,
@@ -156,8 +164,10 @@ class DemographicKineticsLSTM(nn.Module):
     
     If N-th order polynomial fitting does not work, an alternative is to try Fourier series.
     """
-    def __init__(self, num_input_vectors, num_output_vectors):
+    def __init__(self, num_input_vectors, num_output_vectors, name='DemographicKineticsLSTM'):
         super().__init__()
+        
+        self.model_name = name
         
         self.lstm = nn.LSTM(
             input_size=num_input_vectors,
