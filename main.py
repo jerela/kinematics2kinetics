@@ -10,18 +10,36 @@ from torch.utils.data import DataLoader, Subset
 
 from datasets import CustomTimeSeriesDataset
 from networks import KineticsLSTM, DemographicKineticsLSTM, KineticsFFN, KineticsCNN, KineticsGRU, WeightedMSELoss
-from visualization import Plotter
+from visualization import Plotter, save_loss_figure, save_sample_figure
 
 from options import rng_seed, batch_size, early_stopping_threshold, max_epochs, file_dataset, lr_initial, plot_losses, plot_sample, workers, path_output
 
 torch.manual_seed(rng_seed)
 
 
+def get_time_series(model, dataset, loss_fn, n_samples=1):
+    output = []
+    model.eval()
+    with torch.no_grad():
+        for i_sample in range(n_samples):
+            sample_input_scalars, sample_input_time_series, sample_target = dataset[i_sample]
+            sample_input_scalars = sample_input_scalars.unsqueeze(0)
+            sample_input_time_series = sample_input_time_series.unsqueeze(0)
+            sample_target = sample_target.unsqueeze(0).permute(0,2,1)
+            output_trained = model((sample_input_scalars, sample_input_time_series)).detach()
+            loss_trained = loss_fn(sample_target,output_trained)
+            plottable_data = (sample_target.detach().squeeze(0), output_trained.squeeze(0))
+            output.append({
+                'time_series': plottable_data,
+                'loss': loss_trained
+            })
+    return output
+            
 #def loss_fn(predicted, target):
 #    return ((predicted - target)**2).mean()
 
-def save_checkpoint(checkpoint,name):
-    full_path = os.path.join(path_output, f'checkpoint_{name}.pt')
+def save_checkpoint(checkpoint, name):
+    full_path = os.path.join(path_output, 'Checkpoints', f'checkpoint_{name}.pt')
     torch.save(checkpoint, full_path)
 
 
@@ -142,8 +160,13 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
                 'epoch_at_minimum_loss': best_epoch,
                 'model_state_dict_at_minimum_loss': model_state_dict_at_best_loss
             }
-            save_checkpoint(checkpoint, f'{model.model_name}_epoch{epoch}')
+            save_checkpoint(checkpoint, f'{model.model_name}_epoch{epoch+1}')
         
+    
+    # log model and optimizer states and figures
+    save_checkpoint(checkpoint, f'{model.model_name}_epoch{epoch+1}_finished')
+    save_loss_figure((losses_training,losses_validation), f'{model.model_name}_epoch{epoch+1}')
+    save_sample_figure(get_time_series(model=model, dataset=validation_set, loss_fn=loss_fn, n_samples=torch.min(torch.tensor([len(validation_set), 9]))), name=f'{model.model_name}_epoch{epoch+1}')
     
     training_output = {
         'epoch': epoch,
@@ -155,7 +178,7 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
         'epoch_at_minimum_loss': best_epoch,
         'model_state_dict_at_minimum_loss': model_state_dict_at_best_loss
     }
-    save_checkpoint(checkpoint, f'{model.model_name}_epoch{epoch}_finished')
+    
     return training_output
 
 
@@ -176,7 +199,7 @@ def run_kfold():
     # loop through the number of layers for loss evaluation and hyperparameter selection
     for j in range(len(layers)):
         num_layers = layers[j]
-        model = KineticsGRU(n_inputs,n_targets,num_layers)
+        model = KineticsGRU(n_inputs,n_targets,num_layers,name=f'GRU_{num_layers}_layers')
     
         losses = []
         # loop through each fold
@@ -215,6 +238,8 @@ def run_kfold():
 
 
 def main():
+    
+    # NEXT: save images of losses, and some samples
     
     run_kfold()
     #dataset = CustomTimeSeriesDataset(file_dataset)

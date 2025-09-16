@@ -1,5 +1,42 @@
+import os
 import matplotlib.pyplot as plt
+from options import path_output
 
+# save the target and prediction time series of the first 9 (or less) samples from the validation set
+def save_sample_figure(data, name):
+    n_samples = len(data)
+    fig = plt.figure()
+    for i_sample in range(n_samples):
+        ts = data[i_sample]['time_series']
+        target = ts[0]
+        prediction = ts[1]
+        loss = data[i_sample]['loss']
+        fig.add_subplot(3, 3, i_sample+1)
+        plt.plot(target, 'b', label='target')
+        plt.plot(prediction, 'r', label='prediction')
+        plt.title(f'Loss: {loss:.4f}')
+    plt.legend()
+    full_path = os.path.join(path_output, 'Figures', f'samples_{name}.png')
+    plt.savefig(full_path)
+
+# save training and validation losses as subplots in one figure
+def save_loss_figure(losses, name):
+    loss_training, loss_validation = losses
+    
+    fig = plt.figure()
+    fig.add_subplot(121)
+    plt.plot(loss_training)
+    plt.xlabel('epoch')
+    plt.ylabel('loss')
+    plt.title('Training loss')
+    fig.add_subplot(122)
+    plt.plot(loss_validation)
+    plt.xlabel('epoch')
+    plt.title('Validation loss')
+    
+    full_path = os.path.join(path_output, 'Figures', f'losses_{name}.png')
+    plt.savefig(full_path)
+    
 
 class Plotter():
     
