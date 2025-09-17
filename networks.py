@@ -6,29 +6,40 @@ from options import lstm_hidden_size, lstm_num_layers, lstm_bidirectional
 
 # mean square error function that puts less emphasis on values at the beginning and the end of the time series, to account for the high simulation nose in the beginning and end of contact force time series
 class WeightedMSELoss(nn.Module):
-    def __init__(self, length):
+    def __init__(self):
         super().__init__()
         
-        weights = torch.ones(length)
+        # define the kernel size of the convolution filter
+        self.window_size = 9
+    
+    # because the data may be padded, we use convolution to make sure the weights of the loss mitigate the effects of padding while also applying some mitigation at both ends of the padless time series
+    def __update_weights_mask(self, targets):
         
-        # threshold controls the fraction of the total sequence length (at the beginning and the end of the sequence) that has reduced emphasis
-        threshold = 0.05
+        # create a mask that is 1 for non-zero values in the target time series, and 0 otherwise
+        nonzeros = (targets != 0).float()
         
-        # weight is 0 at the edges of the sequence, increases linearly to 1 over a distance of one threshold from the edge
-        for x, weight in enumerate(weights):
-            if float(x) <= threshold*length:
-                x_local = float(x)
-                weight = x_local / (threshold*length)
-            elif float(x) >= (1.0-threshold)*length:
-                x_local = (float(x)-length) 
-                weight = -x_local / (threshold*length)
-            weights[x] = weight
-        self.weights = weights
-        print(f'Weights: {self.weights}')
+        # get the number of target channels or features
+        target_shape = targets.shape        
+        n_channels = target_shape[1]
         
+        # construct the filters so their elements sum to 1 (normalized to 1)
+        filters = torch.ones((n_channels, n_channels, self.window_size))/self.window_size
+        padding_size = int((self.window_size-1)/2)
+        
+        # calculate the final weights mask
+        self.weights_mask = F.conv1d(nonzeros, weight=filters, padding=padding_size)
+        
+        #print(f'Weights: {self.weights_mask}')
+        #fig = plt.figure()
+        #fig.add_subplot(121)
+        #plt.plot(self.weights_mask[0,:,:].squeeze(0),'x')
+        #fig.add_subplot(122)
+        #plt.plot(targets[0,:,:].squeeze(0))
+        #plt.show()
         
     def forward(self, inputs, targets):
-        return torch.mean( ((inputs-targets)**2) * self.weights )
+        self.__update_weights_mask(targets)
+        return torch.mean( ((inputs-targets)**2) * self.weights_mask )
 
 
 # various network architectures that map input kinematic time series to output kinetic time series
@@ -63,28 +74,81 @@ class KineticsFFN(nn.Module):
                 
         return prediction
 
-# convolutional neural network, performs alright when kernel size is 1 and worse otherwise
+
+# convolutional neural network
 class KineticsCNN(nn.Module):
-    def __init__(self, num_input_vectors, num_output_vectors, name='KineticsCNN'):
+    def __init__(self, num_input_vectors, num_output_vectors, kernel_size=1, name='KineticsCNN'):
         super().__init__()
         
         self.model_name = name
         
-        self.c1 = nn.Conv1d(
-            in_channels=num_input_vectors,
-            out_channels=num_output_vectors,
-            kernel_size=1,
-            stride=1,
-            padding='same',
-            dilation=1,
-            padding_mode='zeros'
+        
+        
+        self.c1 = nn.Sequential(
+            nn.Conv1d(
+                in_channels=num_input_vectors,
+                out_channels=num_output_vectors*8,
+                kernel_size=kernel_size,
+                stride=1,
+                padding='same',
+                dilation=1,
+                padding_mode='zeros'
+            ),
+            nn.BatchNorm1d(num_features=num_output_vectors*8),
+            nn.ReLU()
         )
+        
+        self.c2 = nn.Sequential(
+            nn.Conv1d(
+                in_channels=num_output_vectors*8,
+                out_channels=num_output_vectors*16,
+                kernel_size=kernel_size,
+                stride=1,
+                padding='same',
+                dilation=1,
+                padding_mode='zeros'
+            ),
+            nn.BatchNorm1d(num_features=num_output_vectors*16),
+            nn.ReLU()
+        )
+        
+        self.c3 = nn.Sequential(
+            nn.Conv1d(
+                in_channels=num_output_vectors*16,
+                out_channels=num_output_vectors*32,
+                kernel_size=kernel_size,
+                stride=1,
+                padding='same',
+                dilation=1,
+                padding_mode='zeros'
+            ),
+            nn.BatchNorm1d(num_features=num_output_vectors*32),
+            nn.ReLU()
+        )
+        
+        self.c4 = nn.Sequential(
+            nn.Conv1d(
+                in_channels=num_output_vectors*32,
+                out_channels=num_output_vectors,
+                kernel_size=kernel_size,
+                stride=1,
+                padding='same',
+                dilation=1,
+                padding_mode='zeros'
+            ),
+            nn.BatchNorm1d(num_features=num_output_vectors),
+            nn.ReLU()
+        )
+
         
     def forward(self, inputs):
         scalars, time_series = inputs
         batch_size = scalars.shape[0]
         
         x = self.c1(time_series)
+        x = self.c2(x)
+        x = self.c3(x)
+        x = self.c4(x)
         x = x.permute(0,2,1)
         return x
         

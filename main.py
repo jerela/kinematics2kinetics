@@ -45,7 +45,7 @@ def save_checkpoint(checkpoint, name):
 
 def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, early_stopping = 25, plot_losses=False, plot_sample=False):
     
-    loss_fn = WeightedMSELoss(length=training_set.get_sequence_length())
+    loss_fn = WeightedMSELoss()
     
     # construct DataLoader
     data_loader_training = DataLoader(training_set, shuffle=True, batch_size=batch_size, num_workers=workers)
@@ -130,7 +130,7 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
                 plottable_titles = ('target', 'untrained prediction', 'trained prediction')
                 plotter.plot_samples(plottable_data, plottable_titles)
 
-        # early stopping
+        # early stopping: best loss means minimum loss
         if validation_loss < best_loss:
             best_loss = validation_loss
             best_epoch = epoch
@@ -182,7 +182,7 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
     return training_output
 
 
-def run_kfold():
+def run_kfold_gru():
     
     dataset = CustomTimeSeriesDataset(file_dataset)
     
@@ -199,11 +199,12 @@ def run_kfold():
     # loop through the number of layers for loss evaluation and hyperparameter selection
     for j in range(len(layers)):
         num_layers = layers[j]
-        model = KineticsGRU(n_inputs,n_targets,num_layers,name=f'GRU_{num_layers}_layers')
+        
     
         losses = []
         # loop through each fold
         for i in range(k):
+            model = KineticsGRU(n_inputs,n_targets,num_layers,name=f'GRU_{num_layers}layers_fold{i+1}')
             print(f'- - - FOLD {i+1} - - -')
             print(f'Dataset length: {len(dataset)}, numbers of indices: {len(idxs[i])}')
             # construct training and validation set for each fold by concatenating the indices in all but one fold (training) and counting the indices in the leftover fold (validation)
@@ -237,11 +238,67 @@ def run_kfold():
     print(f'Smallest loss of {min_loss} at {layers[min_idx]} layers.')
 
 
+def run_kfold_cnn():
+    
+    dataset = CustomTimeSeriesDataset(file_dataset)
+    
+    n_inputs, n_targets = dataset.get_num_features()
+    
+    k = 5
+    idxs = dataset.kfold(k)
+    
+    
+    hyperparameter_kernel_sizes = (1,3,5,7)
+    
+    loss_per_hyperparameter = []
+    
+    # loop through the number of hyperparameters for loss evaluation and hyperparameter selection
+    for j in range(len(hyperparameter_kernel_sizes)):
+        kernel_size = hyperparameter_kernel_sizes[j]
+        
+    
+        losses = []
+        # loop through each fold
+        for i in range(k):
+            model = KineticsCNN(n_inputs,n_targets,kernel_size=kernel_size,name=f'CNN_kernelsize{kernel_size}_fold{i+1}')
+            print(f'- - - FOLD {i+1} - - -')
+            print(f'Dataset length: {len(dataset)}, numbers of indices: {len(idxs[i])}')
+            # construct training and validation set for each fold by concatenating the indices in all but one fold (training) and counting the indices in the leftover fold (validation)
+            idx_training = []
+            idx_validation = []
+            for j in range(k):
+                if i == j:
+                    idx_validation = idxs[i]
+                else:
+                    idx_training = idx_training + idxs[j]
+            training_set = dataset.subset(idx_training)
+            validation_set = dataset.subset(idx_validation)
+            training_output = train(model=model, training_set=training_set, validation_set=validation_set, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
+            validation_loss = training_output['validation_loss'][-1]
+            losses.append(validation_loss)
+            
+            
+        mean_loss = statistics.fmean(losses)
+        print(f'All {k} folds iterated. Losses: {losses}, mean loss: {mean_loss}')
+        loss_per_hyperparameter.append(mean_loss)
+        
+    
+    print(f'Kernel sizes: {hyperparameter_kernel_sizes}, corresponding losses: {loss_per_hyperparameter}')
+    # find the kernel size with the smallest mean loss over all folds
+    min_loss = float('inf')
+    min_idx = -1
+    for i,value in enumerate(loss_per_hyperparameter):
+        if value < min_loss:
+            min_loss = value
+            min_idx = i
+    print(f'Smallest loss of {min_loss} at kernel size {hyperparameter_kernel_sizes[min_idx]}.')
+
+
 def main():
     
     # NEXT: save images of losses, and some samples
     
-    run_kfold()
+    run_kfold_cnn()
     #dataset = CustomTimeSeriesDataset(file_dataset)
     
     #n_inputs, n_targets = dataset.get_num_features()
