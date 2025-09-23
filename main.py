@@ -9,7 +9,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, Subset
 
 from datasets import CustomTimeSeriesDataset
-from networks import KineticsLSTM, DemographicKineticsLSTM, KineticsFFN, KineticsCNN, KineticsGRU, WeightedMSELoss
+from networks import KineticsLSTM, KineticsFFN, KineticsCNN, KineticsCNN2D, KineticsGRU, WeightedMSELoss, DemographicScaler
 from visualization import Plotter, save_loss_figure, save_sample_figure
 
 from options import rng_seed, batch_size, early_stopping_threshold, max_epochs, file_dataset, lr_initial, plot_losses, plot_sample, workers, path_output
@@ -243,12 +243,14 @@ def run_kfold_cnn():
     dataset = CustomTimeSeriesDataset(file_dataset)
     
     n_inputs, n_targets = dataset.get_num_features()
+    sequence_length = dataset.get_sequence_length()
+    print(f'Sequence length: {sequence_length}')
     
     k = 5
     idxs = dataset.kfold(k)
     
     
-    hyperparameter_kernel_sizes = (1,3,5,7)
+    hyperparameter_kernel_sizes = (7,9)
     
     loss_per_hyperparameter = []
     
@@ -260,7 +262,10 @@ def run_kfold_cnn():
         losses = []
         # loop through each fold
         for i in range(k):
-            model = KineticsCNN(n_inputs,n_targets,kernel_size=kernel_size,name=f'CNN_kernelsize{kernel_size}_fold{i+1}')
+            # first, we instantiate a model for predicting the time series from input time series
+            ts_model = KineticsCNN(n_inputs,n_targets,kernel_size=kernel_size,name=f'CNN_kernelsize{kernel_size}_fold{i+1}')
+            # then, we instantiate a model that incorporates the time series model and additionally applies scaling based on demographics
+            model = DemographicScaler(time_series_model=ts_model, num_input_vectors=n_inputs, num_output_vectors=n_targets, sequence_length=sequence_length, name=f'Demographic_CNN_kernelsize{kernel_size}_fold{i+1}')
             print(f'- - - FOLD {i+1} - - -')
             print(f'Dataset length: {len(dataset)}, numbers of indices: {len(idxs[i])}')
             # construct training and validation set for each fold by concatenating the indices in all but one fold (training) and counting the indices in the leftover fold (validation)
@@ -292,6 +297,67 @@ def run_kfold_cnn():
             min_loss = value
             min_idx = i
     print(f'Smallest loss of {min_loss} at kernel size {hyperparameter_kernel_sizes[min_idx]}.')
+
+
+def run_kfold_cnn2d():
+    
+    dataset = CustomTimeSeriesDataset(file_dataset)
+    
+    n_inputs, n_targets = dataset.get_num_features()
+    sequence_length = dataset.get_sequence_length()
+    print(f'Sequence length: {sequence_length}')
+    
+    k = 5
+    idxs = dataset.kfold(k)
+    
+    
+    hyperparameter_kernel_widths = (7,9)
+    
+    loss_per_hyperparameter = []
+    
+    # loop through the number of hyperparameters for loss evaluation and hyperparameter selection
+    for j in range(len(hyperparameter_kernel_widths)):
+        kernel_width = hyperparameter_kernel_widths[j]
+        
+    
+        losses = []
+        # loop through each fold
+        for i in range(k):
+            # first, we instantiate a model for predicting the time series from input time series
+            ts_model = KineticsCNN2D(n_inputs,n_targets,kernel_width=kernel_width,name=f'CNN2D_kernelwidth{kernel_width}_fold{i+1}')
+            # then, we instantiate a model that incorporates the time series model and additionally applies scaling based on demographics
+            model = DemographicScaler(time_series_model=ts_model, num_input_vectors=n_inputs, num_output_vectors=n_targets, sequence_length=sequence_length, name=f'Demographic_CNN2D_kernelwidth{kernel_width}_fold{i+1}')
+            print(f'- - - FOLD {i+1} - - -')
+            print(f'Dataset length: {len(dataset)}, numbers of indices: {len(idxs[i])}')
+            # construct training and validation set for each fold by concatenating the indices in all but one fold (training) and counting the indices in the leftover fold (validation)
+            idx_training = []
+            idx_validation = []
+            for j in range(k):
+                if i == j:
+                    idx_validation = idxs[i]
+                else:
+                    idx_training = idx_training + idxs[j]
+            training_set = dataset.subset(idx_training)
+            validation_set = dataset.subset(idx_validation)
+            training_output = train(model=model, training_set=training_set, validation_set=validation_set, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
+            validation_loss = training_output['validation_loss'][-1]
+            losses.append(validation_loss)
+            
+            
+        mean_loss = statistics.fmean(losses)
+        print(f'All {k} folds iterated. Losses: {losses}, mean loss: {mean_loss}')
+        loss_per_hyperparameter.append(mean_loss)
+        
+    
+    print(f'Kernel widths: {hyperparameter_kernel_widths}, corresponding losses: {loss_per_hyperparameter}')
+    # find the kernel size with the smallest mean loss over all folds
+    min_loss = float('inf')
+    min_idx = -1
+    for i,value in enumerate(loss_per_hyperparameter):
+        if value < min_loss:
+            min_loss = value
+            min_idx = i
+    print(f'Smallest loss of {min_loss} at kernel width {hyperparameter_kernel_widths[min_idx]}.')
 
 
 def main():

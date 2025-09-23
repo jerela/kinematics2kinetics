@@ -61,8 +61,8 @@ class KineticsFFN(nn.Module):
         
     def forward(self,inputs):
         
-        scalars, time_series = inputs
-        batch_size = scalars.shape[0]
+        time_series = inputs
+        batch_size = time_series.shape[0]
         
         x = self.flattener(time_series)
         x = self.fc1(x)
@@ -84,74 +84,169 @@ class KineticsCNN(nn.Module):
         
         
         
-        self.c1 = nn.Sequential(
-            nn.Conv1d(
-                in_channels=num_input_vectors,
-                out_channels=num_output_vectors*8,
-                kernel_size=kernel_size,
-                stride=1,
-                padding='same',
-                dilation=1,
-                padding_mode='zeros'
-            ),
-            nn.BatchNorm1d(num_features=num_output_vectors*8),
-            nn.ReLU()
+        self.c1 = nn.Conv1d(
+            in_channels=num_input_vectors,
+            out_channels=num_output_vectors*8,
+            kernel_size=kernel_size,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
         )
+        self.bn1 = nn.BatchNorm1d(num_features=num_output_vectors*8)
+        self.relu = nn.ReLU()
         
-        self.c2 = nn.Sequential(
-            nn.Conv1d(
-                in_channels=num_output_vectors*8,
-                out_channels=num_output_vectors*16,
-                kernel_size=kernel_size,
-                stride=1,
-                padding='same',
-                dilation=1,
-                padding_mode='zeros'
-            ),
-            nn.BatchNorm1d(num_features=num_output_vectors*16),
-            nn.ReLU()
-        )
         
-        self.c3 = nn.Sequential(
-            nn.Conv1d(
-                in_channels=num_output_vectors*16,
-                out_channels=num_output_vectors*32,
-                kernel_size=kernel_size,
-                stride=1,
-                padding='same',
-                dilation=1,
-                padding_mode='zeros'
-            ),
-            nn.BatchNorm1d(num_features=num_output_vectors*32),
-            nn.ReLU()
+        self.c2 = nn.Conv1d(
+            in_channels=num_output_vectors*8,
+            out_channels=num_output_vectors*16,
+            kernel_size=kernel_size,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
         )
+        self.bn2 = nn.BatchNorm1d(num_features=num_output_vectors*16)
         
-        self.c4 = nn.Sequential(
-            nn.Conv1d(
-                in_channels=num_output_vectors*32,
-                out_channels=num_output_vectors,
-                kernel_size=kernel_size,
-                stride=1,
-                padding='same',
-                dilation=1,
-                padding_mode='zeros'
-            ),
-            nn.BatchNorm1d(num_features=num_output_vectors),
-            nn.ReLU()
+        
+        self.c3 = nn.Conv1d(
+            in_channels=num_output_vectors*16,
+            out_channels=num_output_vectors*32,
+            kernel_size=kernel_size,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
         )
+        self.bn3 = nn.BatchNorm1d(num_features=num_output_vectors*32)
+        
+        self.c4 = nn.Conv1d(
+            in_channels=num_output_vectors*32,
+            out_channels=num_output_vectors,
+            kernel_size=kernel_size,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
+        )
+        self.bn4 = nn.BatchNorm1d(num_features=num_output_vectors)
 
         
     def forward(self, inputs):
-        scalars, time_series = inputs
-        batch_size = scalars.shape[0]
+        time_series = inputs
+        batch_size = time_series.shape[0]
         
         x = self.c1(time_series)
+        x = self.bn1(x)
+        x = self.relu(x)
         x = self.c2(x)
+        x = self.bn2(x)
+        x = self.relu(x)
         x = self.c3(x)
+        x = self.bn3(x)
+        x = self.relu(x)
         x = self.c4(x)
+        x = self.bn4(x)
+        x = self.relu(x)
         x = x.permute(0,2,1)
         return x
         
+
+# convolutional neural network with 2D filter; note that this may not bring any additional information compared with 1D CNN, because the order of the rows (different kinematics time series) shouldn't carry useful information
+class KineticsCNN2D(nn.Module):
+    def __init__(self, num_input_vectors, num_output_vectors, kernel_width=1, name='KineticsCNN2D'):
+        super().__init__()
+        
+        self.model_name = name
+        
+        # we use padding that ensures that the kernel moves along the width dimension keeping the width constant, but doesn't move along the height dimension
+        padding_2d = (0, int((kernel_width-1)/2))
+        
+        self.c1 = nn.Conv2d(
+            in_channels=1,
+            out_channels=num_output_vectors*8,
+            kernel_size=(num_input_vectors, kernel_width),
+            stride=1,
+            padding=padding_2d,
+            dilation=1,
+            padding_mode='zeros'
+        )
+        self.bn1 = nn.BatchNorm1d(num_features=num_output_vectors*8)
+        self.relu = nn.ReLU()
+        
+        
+        self.c2 = nn.Conv1d(
+            in_channels=num_output_vectors*8,
+            out_channels=num_output_vectors*16,
+            kernel_size=kernel_width,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
+        )
+        self.bn2 = nn.BatchNorm1d(num_features=num_output_vectors*16)
+        
+        self.c3 = nn.Conv1d(
+            in_channels=num_output_vectors*16,
+            out_channels=num_output_vectors*32,
+            kernel_size=kernel_width,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
+        )
+        self.bn3 = nn.BatchNorm1d(num_features=num_output_vectors*32)
+        
+        self.c4 = nn.Conv1d(
+            in_channels=num_output_vectors*32,
+            out_channels=num_output_vectors,
+            kernel_size=kernel_width,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
+        )
+        self.bn4 = nn.BatchNorm1d(num_features=num_output_vectors)
+        
+    def forward(self, inputs):
+        time_series = inputs
+        batch_size = time_series.shape[0]
+        
+        #print(f'SHAPE BEFORE: {time_series.shape}')
+        
+        
+        # to treat the multiple-channel time series as image instead, we must add one dimension to denote the number of channels (1) in the image
+        x = time_series.unsqueeze(1)
+        
+        #print(f'SHAPE UNSQUEEZED: {x.shape}')
+        
+        x = self.c1(x)
+        
+        #print(f'SHAPE AFTER: {x.shape}')
+        
+        # undoing the effects of the squeze ~20 lines above, we transform x back to a format that is 1D time series with multiple features, where each feature is its own channel
+        x = x.squeeze(2)
+        
+        #print(f'SHAPE SQUEEZED: {x.shape}')
+        
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.c2(x)
+        x = self.bn2(x)
+        x = self.relu(x)
+        x = self.c3(x)
+        x = self.bn3(x)
+        x = self.relu(x)
+        x = self.c4(x)
+        x = self.bn4(x)
+        x = self.relu(x)
+        
+        
+        
+        
+        
+        x = x.permute(0,2,1)
+        return x
 
 # gated recurrent unit network
 class KineticsGRU(nn.Module):
@@ -173,7 +268,7 @@ class KineticsGRU(nn.Module):
         
     def forward(self,inputs):
         
-        scalars, time_series = inputs
+        time_series = inputs
         
         # transform to the correct format that is defined by making batch_first=True in the LSTM constructor
         time_series_trans = time_series.permute(0,2,1)
@@ -204,7 +299,7 @@ class KineticsLSTM(nn.Module):
         
     def forward(self,inputs):
         
-        scalars, time_series = inputs
+        time_series = inputs
         
         # transform to the correct format that is defined by making batch_first=True in the LSTM constructor
         time_series_trans = time_series.permute(0,2,1)
@@ -216,82 +311,63 @@ class KineticsLSTM(nn.Module):
         prediction = lstm_out
         return prediction
 
-# LSTM with demographic scalars
-class DemographicKineticsLSTM(nn.Module):
-    """
-    The idea here is that unlike KineticsLSTM, this network incorporates information about scalar variables (mass, height, age, sex).
-    They could be important for measures like moments and contact forces, where simple normalization of outputs by those values will not do. For instance, height does not affect the moments directly, but through its correlation with limb lengths.
-    
-    We could apply the scalars directly to the output time series by training a scaling factor for each time point and output vector (e.g., 101*9 scaling factors). However, because scaling factors of adjacent time points vary, this would result in a noisy output time series.
-    Instead, the idea here is to find an effect of the scalar variables that affects the time series "smoothly". For this purpose, we fit N-th order polynomials to make adjustments to the LSTM output. This should fix the noise-like effect that is present with using individual scaling factors for each time point.
-    This is also interpretable, because if it works, we can input subject demographics and get as output the N-th order polynomial approximated curve that separates the person representing those demogrpahics from the general kinetics time series.
-    
-    If N-th order polynomial fitting does not work, an alternative is to try Fourier series.
-    """
-    def __init__(self, num_input_vectors, num_output_vectors, name='DemographicKineticsLSTM'):
+
+
+# neural network that wraps around a time series predicting neural network and modifies its output to be more specific for subject demographics (body mass, body height, age, sex)
+class DemographicScaler(nn.Module):
+    def __init__(self, time_series_model, num_input_vectors, num_output_vectors, sequence_length, name='DemographicScaler'):
         super().__init__()
         
         self.model_name = name
-        
-        self.lstm = nn.LSTM(
-            input_size=num_input_vectors,
-            hidden_size=lstm_hidden_size,
-            proj_size=num_output_vectors,
-            batch_first=True,
-            num_layers=lstm_num_layers,
-            bidirectional=lstm_bidirectional
-        )
-        self.fc = nn.Linear(4,num_output_vectors)
-        
-        
-        #self.polynomial_degree = 1
         self.num_output_vectors = num_output_vectors
+        self.sequence_length = sequence_length
         
-        #self.fc1 = nn.Linear(4,16)
-        #self.fc2 = nn.Linear(16,(self.polynomial_degree+1)*num_output_vectors)
+        self.relu = nn.ReLU()
+        self.fc1 = nn.Linear(4,16)
+        self.fc2 = nn.Linear(16,64)
+        self.fc3 = nn.Linear(64,num_output_vectors*self.sequence_length)
+
+        # this refers to the model that eats the time series of kinematics (e.g., lower limb joint angles) and vomits out the time series of kinetics (e.g., knee contact forces)
+        self.time_series_model = time_series_model
         
-    def forward(self,inputs):
+        # create parameters for the denoising filter based on the length of the sequence
+        # the padding is calculated as a function of the filter width such that the dimensions of the output is the same as those of the input when convolving with the filter
+        self.denoise_filter_width = round(self.sequence_length/15)
+        if self.denoise_filter_width%2 == 0:
+            self.denoise_filter_width += 1
+        self.denoise_filter_padding = int((self.denoise_filter_width-1)/2)
+        
+    def forward(self, inputs):
+        
+        
+        # MUOKKAA: KINEMATICS -> 1DCONV -> FULLY CONNECTED -> YHDISTYY SKALAARIEN FULLY CONNECTEDEIHIN JA LUO TÄTEN LOPULLISEN KERROINMASKIN
         
         scalars, time_series = inputs
-        
         batch_size = scalars.shape[0]
         
-        # transform to the correct format that is defined by making batch_first=True in the LSTM constructor
-        time_series_trans = time_series.permute(0,2,1)
+        # predict the time series of kinetics from the time series of kinematics
+        kinetics = self.time_series_model(time_series)
+
         
-        # pass the transposed input to the LSTM
-        lstm_out, temp = self.lstm(time_series_trans)
-        # lstm_out now contains the short-term memory values from each unrolled LSTM unit
+        # process scalar inputs into a "mask" that we can apply over the CNN-estimated curve
+        x = self.fc1(scalars)
+        x = self.relu(x)
+        x = self.fc2(x)
+        x = self.relu(x)
+        x = self.fc3(x)
+        x = self.relu(x)
         
-        x = self.fc(scalars)
-        x = F.sigmoid(x)
-        #print(f'shape of x: {x.shape}')
-        x = x.unsqueeze(1)
-        #print(f'shape of x: {x.shape}')
-        #x = x.repeat(1,101,1)
-        #print(f'shape of x: {x.shape}')
-        
-        
-        # DIMC_COEFFS = (BATCH, POLYDEGREE, NUM_VECTORS=9)
-        # DIM_Y = (BATCH, TIMEPOINTS=101, NUM_VECTORS=9)
-        
-        # polynomial construction
-        #x = self.fc1(scalars)
-        #x = F.sigmoid(x)
-        #x = self.fc2(x)
-        #x = F.sigmoid(x)
-        #coefficients = x.reshape(batch_size, self.polynomial_degree+1, self.num_output_vectors)
-        #y = torch.zeros((batch_size, 101, self.num_output_vectors))
-        #for i in range(self.polynomial_degree+1):
-        #    y += coefficients[:,i,:].reshape(batch_size, 1, self.num_output_vectors) * (torch.arange(1,102)**i).reshape(1,101,1).repeat(batch_size, 1, self.num_output_vectors)
-            
+        x = x.reshape((batch_size,self.num_output_vectors,self.sequence_length))
+        # mimic a low-pass filter by averaging in order to create the scaling mask
+        x = F.avg_pool1d(x, kernel_size=self.denoise_filter_width, stride=1, padding=self.denoise_filter_padding, count_include_pad=False)
+
+        # move the dimensions so that the order is (BATCH, SEQUENCE, FEATURES) where FEATURES can also be called CHANNELS (e.g., if the time series has 250 data points, those are in SEQUENCE, and if it has 4 loading features, those are in FEATURES)
+        x = x.permute(0,2,1)        
+        # scale each value in the kinetics time series by the scaling mask (x)
+        x = kinetics * x
         
         
-        #print(f'shape of lstm_out: {lstm_out.shape}')
-        
-        output_scaled = lstm_out+x
-        
-        #print(f'shape of output: {output_scaled.shape}')
-        
-        prediction = output_scaled
-        return prediction
+        return x
+
+
+

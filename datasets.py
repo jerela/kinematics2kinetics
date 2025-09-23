@@ -52,9 +52,9 @@ class CustomTimeSeriesDataset(Dataset):
         }
         
         self.scalar_bounds = {
-            'body_mass': (30.0, 180.0),
-            'body_height': (1.0, 2.5),
-            'age': (18.0, 100.0)
+            'body_mass': (40.0, 150.0),
+            'body_height': (1.4, 2.2),
+            'age': (18.0, 80.0)
         }
         
         self.kinetics_bounds = {
@@ -185,10 +185,10 @@ class CustomTimeSeriesDataset(Dataset):
         self.num_rows = len(data_frame.index)
         
         # process subject demographics
-        body_mass = self.__series_to_tensor(data_frame['body_mass'])
-        body_height = torch.tensor(self.__convert_height_to_meters(data_frame['body_height']))
-        age = self.__series_to_tensor(data_frame['age'])
-        sex = self.__map_sex_to_binary(data_frame['sex'])
+        body_mass = self.__series_to_tensor(data_frame['body_mass']).to(torch.float32)
+        body_height = torch.tensor(self.__convert_height_to_meters(data_frame['body_height'])).to(torch.float32)
+        age = self.__series_to_tensor(data_frame['age']).to(torch.float32)
+        sex = self.__map_sex_to_binary(data_frame['sex']).to(torch.float32)
         
         if self.normalize_data:
             body_mass = self.__normalize(body_mass,'body_mass')
