@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from options import lstm_hidden_size, lstm_num_layers, lstm_bidirectional
+from options import lstm_num_layers, lstm_bidirectional
 
 # mean square error function that puts less emphasis on values at the beginning and the end of the time series, to account for the high simulation nose in the beginning and end of contact force time series
 class WeightedMSELoss(nn.Module):
@@ -283,19 +283,21 @@ class KineticsGRU(nn.Module):
 
 # long short-term memory network
 class KineticsLSTM(nn.Module):
-    def __init__(self, num_input_vectors, num_output_vectors, name='KineticsLSTM'):
+    def __init__(self, num_input_vectors, num_output_vectors, hidden_size=20, name='KineticsLSTM'):
         super().__init__()
         
         self.model_name = name
         
         self.lstm = nn.LSTM(
             input_size=num_input_vectors,
-            hidden_size=lstm_hidden_size,
+            hidden_size=hidden_size,
             proj_size=num_output_vectors,
             batch_first=True,
             num_layers=lstm_num_layers,
             bidirectional=lstm_bidirectional
         )
+        
+        self.relu = nn.ReLU()
         
     def forward(self,inputs):
         
@@ -318,7 +320,7 @@ class DemographicScaler(nn.Module):
     def __init__(self, time_series_model, num_input_vectors, num_output_vectors, sequence_length, name='DemographicScaler'):
         super().__init__()
         
-        self.model_name = name
+        self.model_name = f'Demographic_{time_series_model.model_name}'
         self.num_output_vectors = num_output_vectors
         self.sequence_length = sequence_length
         
@@ -347,7 +349,6 @@ class DemographicScaler(nn.Module):
         
         # predict the time series of kinetics from the time series of kinematics
         kinetics = self.time_series_model(time_series)
-
         
         # process scalar inputs into a "mask" that we can apply over the CNN-estimated curve
         x = self.fc1(scalars)
