@@ -3,26 +3,26 @@ import os
 import copy
 
 import torch
-import torch.nn.functional as F
+from torch.utils.data import DataLoader, Subset
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.utils.data import DataLoader, Subset
 
 from datasets import CustomTimeSeriesDataset
 from networks import KineticsLSTM, KineticsFFN, KineticsCNN, KineticsCNN2D, KineticsGRU, WeightedMSELoss, DemographicScaler
 from visualization import Plotter, save_loss_figure, save_sample_figure
-
-from options import rng_seed, batch_size, early_stopping_threshold, max_epochs, file_dataset, lr_initial, plot_losses, plot_sample, workers, path_output
-
-torch.manual_seed(rng_seed)
+from options import batch_size, early_stopping_threshold, max_epochs, file_dataset, lr_initial, plot_losses, plot_sample, workers, path_output
 
 
-def get_time_series(model, dataset, loss_fn, n_samples=1):
+
+
+
+
+def get_time_series(model, dataset, loss_fn, n_samples=1, start_index=0):
     output = []
     model.eval()
     with torch.no_grad():
         for i_sample in range(n_samples):
-            sample_input_scalars, sample_input_time_series, sample_target = dataset[i_sample]
+            sample_input_scalars, sample_input_time_series, sample_target = dataset[i_sample+start_index]
             sample_input_scalars = sample_input_scalars.unsqueeze(0)
             sample_input_time_series = sample_input_time_series.unsqueeze(0)
             sample_target = sample_target.unsqueeze(0).permute(0,2,1)
@@ -166,7 +166,7 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
     # log model and optimizer states and figures
     save_checkpoint(checkpoint, f'{model.model_name}_epoch{epoch+1}_finished')
     save_loss_figure((losses_training,losses_validation), f'{model.model_name}_epoch{epoch+1}')
-    save_sample_figure(get_time_series(model=model, dataset=validation_set, loss_fn=loss_fn, n_samples=torch.min(torch.tensor([len(validation_set), 9]))), name=f'{model.model_name}_epoch{epoch+1}')
+    save_sample_figure(get_time_series(model=model, dataset=sample_set, loss_fn=loss_fn, n_samples=torch.min(torch.tensor([len(sample_set), 9]))), name=f'{model.model_name}_epoch{epoch+1}')
     
     training_output = {
         'epoch': epoch,
@@ -180,6 +180,9 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
     }
     
     return training_output
+
+
+
 
 
 def run_kfold_gru():
@@ -360,30 +363,130 @@ def run_kfold_cnn2d():
     print(f'Smallest loss of {min_loss} at kernel width {hyperparameter_kernel_widths[min_idx]}.')
 
 
-def main():
+def run_kfold_lstm():
     
-    # NEXT: save images of losses, and some samples
+    dataset = CustomTimeSeriesDataset(file_dataset)
     
-    run_kfold_cnn()
-    #dataset = CustomTimeSeriesDataset(file_dataset)
+    n_inputs, n_targets = dataset.get_num_features()
+    sequence_length = dataset.get_sequence_length()
+    print(f'Sequence length: {sequence_length}')
     
-    #n_inputs, n_targets = dataset.get_num_features()
-    #model = KineticsLSTM(n_inputs,n_targets)
-    #model = CNN(n_inputs,n_targets)
-    #model = KineticsGRU(n_inputs,n_targets)
-    
-    #num_layers = 4
-    #model = KineticsGRU(n_inputs,n_targets,num_layers)
-    #model = KineticsLSTM(n_inputs,n_targets)
-    #model = KineticsCNN(n_inputs,n_targets)
-    #model = KineticsFFN(n_inputs,n_targets, dataset.get_sequence_length())
-    #training_output = train(model=model, training_set=dataset, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
+    k = 5
+    idxs = dataset.kfold(k)
     
     
+    hyperparameter_hidden_sizes = (10,20,64,128)
     
+    loss_per_hyperparameter = []
+    
+    # loop through the number of hyperparameters for loss evaluation and hyperparameter selection
+    for j in range(len(hyperparameter_hidden_sizes)):
+        hidden_size = hyperparameter_hidden_sizes[j]
+        
+    
+        losses = []
+        # loop through each fold
+        for i in range(k):
+            # first, we instantiate a model for predicting the time series from input time series
+            ts_model = KineticsLSTM(n_inputs,n_targets,hidden_size=hidden_size,name=f'LSTM_hiddensize{hidden_size}_fold{i+1}')
+            # then, we instantiate a model that incorporates the time series model and additionally applies scaling based on demographics
+            model = DemographicScaler(time_series_model=ts_model, num_input_vectors=n_inputs, num_output_vectors=n_targets, sequence_length=sequence_length, name=f'Demographic_LSTM_hiddensize{hidden_size}_fold{i+1}')
+            print(f'- - - FOLD {i+1} - - -')
+            print(f'Dataset length: {len(dataset)}, numbers of indices: {len(idxs[i])}')
+            # construct training and validation set for each fold by concatenating the indices in all but one fold (training) and counting the indices in the leftover fold (validation)
+            idx_training = []
+            idx_validation = []
+            for j in range(k):
+                if i == j:
+                    idx_validation = idxs[i]
+                else:
+                    idx_training = idx_training + idxs[j]
+            training_set = dataset.subset(idx_training)
+            validation_set = dataset.subset(idx_validation)
+            training_output = train(model=model, training_set=training_set, validation_set=validation_set, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
+            validation_loss = training_output['validation_loss'][-1]
+            losses.append(validation_loss)
+            
+            
+        mean_loss = statistics.fmean(losses)
+        print(f'All {k} folds iterated. Losses: {losses}, mean loss: {mean_loss}')
+        loss_per_hyperparameter.append(mean_loss)
+        
+    
+    print(f'Hidden sizes: {hyperparameter_hidden_sizes}, corresponding losses: {loss_per_hyperparameter}')
+    # find the hidden size with the smallest mean loss over all folds
+    min_loss = float('inf')
+    min_idx = -1
+    for i,value in enumerate(loss_per_hyperparameter):
+        if value < min_loss:
+            min_loss = value
+            min_idx = i
+    print(f'Smallest loss of {min_loss} at hidden size {hyperparameter_hidden_sizes[min_idx]}.')
 
-if __name__ == "__main__":
-    main()
+
+
+
+
+
+def run_kfold_gru():
+    
+    dataset = CustomTimeSeriesDataset(file_dataset)
+    
+    n_inputs, n_targets = dataset.get_num_features()
+    sequence_length = dataset.get_sequence_length()
+    print(f'Sequence length: {sequence_length}')
+    
+    k = 5
+    idxs = dataset.kfold(k)
+    
+    
+    hyperparameter_layer_amount = (1,2,4,8)
+    
+    loss_per_hyperparameter = []
+    
+    # loop through the number of hyperparameters for loss evaluation and hyperparameter selection
+    for j in range(len(hyperparameter_layer_amount)):
+        num_layers = hyperparameter_layer_amount[j]
+        
+    
+        losses = []
+        # loop through each fold
+        for i in range(k):
+            # first, we instantiate a model for predicting the time series from input time series
+            ts_model = KineticsGRU(n_inputs,n_targets,num_layers=num_layers,name=f'GRU_{num_layers}layers_fold{i+1}')
+            # then, we instantiate a model that incorporates the time series model and additionally applies scaling based on demographics
+            model = DemographicScaler(time_series_model=ts_model, num_input_vectors=n_inputs, num_output_vectors=n_targets, sequence_length=sequence_length)
+            print(f'- - - FOLD {i+1} - - -')
+            print(f'Dataset length: {len(dataset)}, numbers of indices: {len(idxs[i])}')
+            # construct training and validation set for each fold by concatenating the indices in all but one fold (training) and counting the indices in the leftover fold (validation)
+            idx_training = []
+            idx_validation = []
+            for j in range(k):
+                if i == j:
+                    idx_validation = idxs[i]
+                else:
+                    idx_training = idx_training + idxs[j]
+            training_set = dataset.subset(idx_training)
+            validation_set = dataset.subset(idx_validation)
+            training_output = train(model=model, training_set=training_set, validation_set=validation_set, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
+            validation_loss = training_output['validation_loss'][-1]
+            losses.append(validation_loss)
+            
+            
+        mean_loss = statistics.fmean(losses)
+        print(f'All {k} folds iterated. Losses: {losses}, mean loss: {mean_loss}')
+        loss_per_hyperparameter.append(mean_loss)
+        
+    
+    print(f'Numbers of layers: {hyperparameter_layer_amount}, corresponding losses: {loss_per_hyperparameter}')
+    # find the hidden size with the smallest mean loss over all folds
+    min_loss = float('inf')
+    min_idx = -1
+    for i,value in enumerate(loss_per_hyperparameter):
+        if value < min_loss:
+            min_loss = value
+            min_idx = i
+    print(f'Smallest loss of {min_loss} at {hyperparameter_layer_amount[min_idx]} layers.')
 
 
 

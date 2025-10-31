@@ -225,7 +225,7 @@ class CustomTimeSeriesDataset(Dataset):
             elif '_contactforces_' in unique_cols[i_col]:
                 idx_contactforces.append(i_col)
                 labels_contactforces.append(unique_cols[i_col])
-                break
+                break # This break here tells us to stop reading columns after finding the first contact force column. Contact forces are last in column names, so despite breaking out of the loop, we'll have read the joint kinematics by then. Summed contact force should be the first contact force column, so we'll read only that instead of the others (medial/lateral/patellofemoral).
             
         #print(f'Index of joint angles: {idx_jointangles}')
         #print(f'Index of joint moments: {idx_jointmoments}')

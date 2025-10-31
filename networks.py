@@ -317,10 +317,13 @@ class KineticsLSTM(nn.Module):
 
 # neural network that wraps around a time series predicting neural network and modifies its output to be more specific for subject demographics (body mass, body height, age, sex)
 class DemographicScaler(nn.Module):
-    def __init__(self, time_series_model, num_input_vectors, num_output_vectors, sequence_length, name='DemographicScaler'):
+    def __init__(self, time_series_model, num_input_vectors, num_output_vectors, sequence_length, name=None):
         super().__init__()
         
-        self.model_name = f'Demographic_{time_series_model.model_name}'
+        if name:
+            self.model_name = name
+        else:
+            self.model_name = f'Demographic_{time_series_model.model_name}'
         self.num_output_vectors = num_output_vectors
         self.sequence_length = sequence_length
         
