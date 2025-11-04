@@ -2,6 +2,7 @@ import torch
 import copy
 from torch.utils.data import Dataset
 import pandas as pd
+from options import kinematics_bounds, kinetics_bounds, scalar_bounds
 
 class CustomTimeSeriesDataset(Dataset):
     """"
@@ -54,32 +55,9 @@ class CustomTimeSeriesDataset(Dataset):
         This loose min-max normalization is done to help the neural networks optimize its weights, which is more stable when inputs are not large numbers.
         """
         # kinematics bounds are based on the joint ranges of motion from the musculoskeletal model, but restricted further to map common values to [0, 1]
-        self.kinematics_bounds = { # instead of using joint ranges of motion from the musculoskeletal model, let's assume plausible ranges during the stance phase
-            'pelvis_tilt': (-45.0, 45.0),#(-90.0, 90.0),
-            'pelvis_list': (-45.0, 45.0),#(-90.0, 90.0),
-            'pelvis_rotation': (-180.0, 180.0), #unclamped, but let's go with -180 to 180 degrees
-            'lumbar_extension': (-45.0, 45.0),#(-90.0, 90.0),
-            'lumbar_bending': (-45.0, 45.0),#(-90.0, 90.0),
-            'lumbar_rotation': (-45.0,45.0),#(-90.0, 90.0),
-            'hip_flexion': (-30.0,60.0),#(-30.0, 120.0),
-            'hip_adduction': (-20.0,20.0),#(-50.0, 30.0),
-            'hip_rotation': (-25.0,25.0),#(-40.0, 40.0),
-            'knee_angle': (0.0,60.0),#(0.0, 120.0),
-            'ankle_angle': (-25.0,30.0),#(-40.0, 30.0)
-        }
-        
-        self.scalar_bounds = {
-            'body_mass': (40.0, 150.0),
-            'body_height': (1.4, 2.2),
-            'age': (18.0, 80.0)
-        }
-        
-        self.kinetics_bounds = {
-            'kcf_summed': (0.0, 6000.0),
-            'kcf_medial': (0.0, 4000.0),
-            'kcf_lateral': (0.0,3000.0),
-            'kcf_patellofemoral': (0.0,4000.0)
-        }
+        self.kinematics_bounds = kinematics_bounds
+        self.scalar_bounds = scalar_bounds
+        self.kinetics_bounds = kinetics_bounds
     
     # return the length of a sequence (e.g., if you have 1500 samples (rows) of 3 different loading feature time series that are each 101 data points long, this returns 101)
     # in other words, the order is (row, feature, time point)
