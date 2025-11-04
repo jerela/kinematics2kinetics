@@ -4,8 +4,15 @@ from torch.utils.data import Dataset
 import pandas as pd
 
 class CustomTimeSeriesDataset(Dataset):
+    """"
+    A class that reads a dataset containing input and target data (including subject demographics scalars and time series of kinematics and kinetics) and provides it for Pytorch algorithms.
+    Used for both the training and the test set.
+    """
     
-    def __init__(self,file):
+    def __init__(self,file: str):
+        """
+        When called using a file path as an argument, reads that filepath with pandas and extracts the data.
+        """
 
         # max number of samples to read; if this is exceeded, nothing is read any longer
         self.max_rows = 50000
@@ -24,19 +31,29 @@ class CustomTimeSeriesDataset(Dataset):
         self.__process_metadata(df)
         self.__process_time_series_data(df)
         
-    def __len__(self):
+    def __len__(self) -> int:
+        """
+        Returns the number of samples (rows) in the data. For example, if the data contains 100 walking trials, returns 100.
+        """
         return self.num_rows
         
-    def __getitem__(self,idx):
+    def __getitem__(self,idx: int) -> tuple:
+        """"
+        Given an integer index, returns a tuple containing the tensors of input subject demographics (scalars), input kinematics (time series), and target time kinetics (time series).
+        In other words, for an index i starting at 0, returns the i'th data sample.
+        """
         sample_input_scalars = self.input_scalars[idx,:]
         sample_input_time_series = self.input_time_series[idx,:,:]
         sample_target_time_series = self.target_time_series[idx,:,:]
         return sample_input_scalars, sample_input_time_series, sample_target_time_series
     
     # initialize the lower and upper bounds for inputs and outputs, used in normalizing the values
-    def __initialize_bounds(self):
-        
-        # kinematics bounds are based on the joint ranges of motion from the musculoskeletal model, but restricted further to map common values to [-1, 1]
+    def __initialize_bounds(self) -> None:
+        """
+        Populates the dictionaries containing the lower and upper bounds of various input and output variables. Note that while these map common values of the variables to range mostly between 0 and 1 using min-max normalization, it is not strict, i.e., some values may be below 0 or above 1.
+        This loose min-max normalization is done to help the neural networks optimize its weights, which is more stable when inputs are not large numbers.
+        """
+        # kinematics bounds are based on the joint ranges of motion from the musculoskeletal model, but restricted further to map common values to [0, 1]
         self.kinematics_bounds = { # instead of using joint ranges of motion from the musculoskeletal model, let's assume plausible ranges during the stance phase
             'pelvis_tilt': (-45.0, 45.0),#(-90.0, 90.0),
             'pelvis_list': (-45.0, 45.0),#(-90.0, 90.0),
@@ -67,12 +84,18 @@ class CustomTimeSeriesDataset(Dataset):
     # return the length of a sequence (e.g., if you have 1500 samples (rows) of 3 different loading feature time series that are each 101 data points long, this returns 101)
     # in other words, the order is (row, feature, time point)
     # note that in networks, the order is different: (batch, time point, feature)
-    def get_sequence_length(self):
-        #return len(self.target_time_series[0,0,:])
+    def get_sequence_length(self) -> int:
+        """
+        Returns the length of an input or target sequence (a single time series). Current implementation assumes that inputs (kinematics time series) and targets (kinetics time series) have the same sequence length.
+        For instance, if inputs and targets are time series with 250 time points, then this methods returns 250.
+        """
         return self.sequence_length
     
     # get a subset (another dataset object) of this dataset that only contains data samples in the given indices
-    def subset(self,idx_list):
+    def subset(self,idx_list: int):
+        """
+        Given a list of sample indices to include, returns a dataset that is a subset of the current dataset. Useful for picking indices for k-fold cross-validation.
+        """
         idx_list.sort()
         idx = torch.tensor(idx_list)
         subset = copy.deepcopy(self)
@@ -90,7 +113,10 @@ class CustomTimeSeriesDataset(Dataset):
         return subset
         
     # get indices for k approximately equally sized folds
-    def kfold(self,k):
+    def kfold(self,k: int):
+        """
+        Given the number of folds k, returns a list of lists containing the sample indices in the folds. A slightly more convenient way than calling get_split_indices() directly.
+        """
         fractions = [1 for x in range(k)]
         idxs = self.get_split_indices(fractions)
         return idxs
@@ -99,6 +125,10 @@ class CustomTimeSeriesDataset(Dataset):
     # get indices that are split according to a given list of fractions, while making sure no data rows of the same subject are placed in different subsets
     # note that all subjects in this context are also from different datasets (ensured through a "subject identifier" that contains the name of the dataset), i.e., if dataset A and dataset B both have a subject called "Subject1", then the code will not be tricked because the subject identifiers will be "A_Subject1" and "B_Subject1"
     def get_split_indices(self, fractions=(70,20,10)):
+        """
+        Given a tuple of fractions of different subsets, returns a list of lists containing the indices of those subsets. Useful for dividing the data into k folds or train-validation-test subsets.
+        Ensures that the samples from a single subject can only be placed in a single subset, and tries to allocate data samples in the subsets evenly.
+        """
         
         # inner function for inserting indices into a subset; because this is used in two different points in the outer function, we'll just define it once here
         def populate(target_index):
@@ -150,13 +180,19 @@ class CustomTimeSeriesDataset(Dataset):
         return subset_indices
     
     # get the number of features (input and target vectors) as a 2-element tuple
-    def get_num_features(self):
+    def get_num_features(self) -> tuple:
+        """
+        Returns a tuple of the number of features in the input and target data. For instance, if the kinematics input consists of the time series of 13 different joint angles and the kinetics input consists of the time series of 3 contact force variables, returns (13, 3).
+        """
         n_input_features = len(self.input_time_series[0,:,0])
         n_target_features = len(self.target_time_series[0,:,0])
         return n_input_features, n_target_features
     
     # process information like dataset name
     def __process_metadata(self, data_frame):
+        """
+        Reads metadata such as the datasets and subjects associated with each data sample from the pandas DataFrame.
+        """
         self.dataset_name = data_frame['dataset']
         unique_datasets = set([x for x in self.dataset_name])
         print(f'Unique datasets in the data: {unique_datasets}')
@@ -167,7 +203,11 @@ class CustomTimeSeriesDataset(Dataset):
         self.unique_subject_ids.sort()
         print(f'Unique subject IDs: {self.unique_subject_ids}')
     
-    def __normalize(self, data, key):
+    def __normalize(self, data, key: str):
+        """
+        Implements min-max normalization to scale data so that the given minimum and maximum boundaries are mapped to 0 and 1. Does not enforce that all data must be in the range [0,1].
+        For example, if mass is scaled between 50 and 150, then 50 kgs will be mapped to 0, 150 kgs will be mapped to 1, 100 kgs will be mapped to 0.5, values below 50 kgs will be mapped to negative numbers, and values above 150 kgs will be mapped to numbers greater than 1.
+        """
         if key in self.scalar_bounds.keys():
             bounds = self.scalar_bounds
         elif key in self.kinematics_bounds.keys():
@@ -179,7 +219,11 @@ class CustomTimeSeriesDataset(Dataset):
         return (data - bounds[key][0]) / (bounds[key][1] - bounds[key][0])
     
     # process all scalar-format data like subject demographics
-    def __process_scalar_data(self,data_frame):
+    def __process_scalar_data(self,data_frame) -> None:
+        """
+        Reads subject demographics from the pandas DataFrame, scales them if required, and places them in a torch Tensor.
+        Also reads the number of rows (samples) in the dataset from the pandas DataFrame so that it can be accessed later with len().
+        """
         
         # store the number of rows
         self.num_rows = len(data_frame.index)
@@ -203,8 +247,10 @@ class CustomTimeSeriesDataset(Dataset):
         print(f'Scalar inputs: {self.input_scalars}')
     
     # process all time series format data like input kinematics and output kinetics
-    def __process_time_series_data(self,data_frame):
-        
+    def __process_time_series_data(self,data_frame) -> None:
+        """
+        Reads input kinematics and target kinetics from the pandas DataFrame and normalizes them if required.
+        """
         
         unique_cols = self.__find_unique_column_labels(data_frame)
         
@@ -252,7 +298,11 @@ class CustomTimeSeriesDataset(Dataset):
                         break
 
     # get a list of unique column labels of time series variables
-    def __find_unique_column_labels(self, dataframe):
+    def __find_unique_column_labels(self, dataframe) -> list[str]:
+        """
+        Returns a list of unique column labels from the pandas DataFrame. Treats column labels with the same body but different suffix as the same label.
+        For example, "knee_angle_r_1", "knee_angle_r_2", ..., "knee_angle_r_99", "knee_angle_r_100" are all treated as a unique column label named "knee_angle_r".
+        """
         # construct a list of unique column labels (i.e., "HipFlx_12" and "HipFlx_45" become just "HipFlx")
         cols = list(dataframe.columns.values)
         unique_cols = []
@@ -271,7 +321,10 @@ class CustomTimeSeriesDataset(Dataset):
         return unique_cols
     
     # insert the read time series into a single tensor
-    def __time_series_data_to_tensor(self, dataframe, unique_cols):
+    def __time_series_data_to_tensor(self, dataframe, unique_cols: list[str]):
+        """
+        Returns a torch Tensor with the time series data read from the pandas DataFrame.
+        """
         # read all time series data into a tensor
         data = torch.empty(len(dataframe.index), len(unique_cols), self.sequence_length)
         for s in range(len(dataframe.index)):
@@ -282,7 +335,10 @@ class CustomTimeSeriesDataset(Dataset):
         return data
     
     # if height is given in millimeters or centimeters, convert it to meters
-    def __convert_height_to_meters(self,heights):
+    def __convert_height_to_meters(self,heights) -> list[float]:
+        """
+        Returns height from the subject demographics as meters after determining the suitable conversion.
+        """
         heights_float = [float(height) for height in heights]
         for i in range(len(heights_float)):
             value = heights_float[i]
@@ -299,6 +355,9 @@ class CustomTimeSeriesDataset(Dataset):
     
     # map sex/gender, which may be given as string 'F' or 'M', to binary integers 0 and 1 so that it can be processed numerically later by the neural network
     def __map_sex_to_binary(self,sexes):
+        """
+        If sex from subject demographics is a string, maps it to binary integers [0=male, 1=female] and returns the binary integers in a tensor.
+        """
         if sexes.dtype == 'object':
             return torch.tensor([int(sex=='F') for sex in sexes])
         # if sex is not a string (represented by the 'object' dtype), we assume it is already an integer and just convert to tensor
