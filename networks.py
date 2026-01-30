@@ -3,9 +3,28 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from options import lstm_num_layers, lstm_bidirectional
+"""
+METHODS/ARCHITECTURES TO EXPLORE:
+- (S)ARIMA(X) (https://www.sktime.net/en/v0.40.1/api_reference/auto_generated/sktime.forecasting.sarimax.SARIMAX.html)
+- XGBOOST (https://www.sktime.net/en/v0.40.1/api_reference/auto_generated/sktime.forecasting.darts.DartsXGBModel.html)
+- LSTMFCN (https://www.sktime.net/en/v0.40.1/api_reference/auto_generated/sktime.regression.deep_learning.lstmfcn.LSTMFCNRegressor.html)
+- multivariate LSTM-FCN for classification reading: https://arxiv.org/pdf/1801.04503
+- ResNetRegressor (https://www.sktime.net/en/v0.40.1/api_reference/auto_generated/sktime.regression.deep_learning.resnet.ResNetRegressor.html)
+- parallel CNN+LSTM
+- first CNN, then feature maps to LSTM
 
+- LSTM-FCN PyTorch implementation: https://github.com/flaviagiammarino/lstm-fcn-pytorch/blob/main/lstm_fcn_pytorch/modules.py
+- MLSTM-FCN PyTorch implementation: https://github.com/alexmelekhin/MLSTM-FCN-Pytorch/blob/main/src/model.py
+
+- ADD DROPOUT TO LSTM
+"""
 # mean square error function that puts less emphasis on values at the beginning and the end of the time series, to account for the high simulation nose in the beginning and end of contact force time series
 class WeightedMSELoss(nn.Module):
+    """
+    A custom loss function that computes the mean square error between the input and the target. Customized to disregard zeros in the target data using a weights mask.
+    Note that the mean is calculated for all elements regardless of shape. Therefore, even if there are several kinetics features or several data samples in the batch, one scalar is returned for loss.
+    This loss should be used during training to compare different hyperparameter configurations, when the absolute value of the loss is irrelevant and only the relative losses matter.
+    """
     def __init__(self):
         super().__init__()
         
@@ -241,10 +260,6 @@ class KineticsCNN2D(nn.Module):
         x = self.bn4(x)
         x = self.relu(x)
         
-        
-        
-        
-        
         x = x.permute(0,2,1)
         return x
 
@@ -297,7 +312,9 @@ class KineticsLSTM(nn.Module):
             bidirectional=lstm_bidirectional
         )
         
-        self.relu = nn.ReLU()
+
+        self.fc = nn.Linear(1,1)
+        self.sigmoid = nn.Sigmoid()
         
     def forward(self,inputs):
         
@@ -309,11 +326,88 @@ class KineticsLSTM(nn.Module):
         # pass the transposed input to the LSTM
         lstm_out, temp = self.lstm(time_series_trans)
         # lstm_out now contains the short-term memory values from each unrolled LSTM unit
-                
-        prediction = lstm_out
+        
+        # if we use a bidirectional LSTM, the output will be a concatenation of the forward and hidden states so we want to sum them together to maintain our data shape
+        if lstm_bidirectional:
+            prediction = (lstm_out[:,:,0]+lstm_out[:,:,1]).unsqueeze(-1)
+        else:
+            prediction = lstm_out
         return prediction
 
-
+# a network where convolutional blocks are first used to find features that are then fed to LSTM
+class KineticsCNNLSTM(nn.Module):
+    def __init__(self, num_input_vectors, num_output_vectors, kernel_size=1, hidden_size=20, name='KineticsCNNLSTM'):
+        super().__init__()
+        
+        self.model_name = name
+        
+        self.relu = nn.ReLU()
+        
+        self.c1 = nn.Conv1d(
+            in_channels=num_input_vectors,
+            out_channels=num_output_vectors*4,
+            kernel_size=kernel_size,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
+        )
+        self.bn1 = nn.BatchNorm1d(num_features=num_output_vectors*4)
+        
+        self.c2 = nn.Conv1d(
+            in_channels=num_output_vectors*4,
+            out_channels=num_output_vectors*8,
+            kernel_size=kernel_size,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
+        )
+        self.bn2 = nn.BatchNorm1d(num_features=num_output_vectors*8)
+        
+        self.c3 = nn.Conv1d(
+            in_channels=num_output_vectors*8,
+            out_channels=num_output_vectors,
+            kernel_size=kernel_size,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
+        )
+        self.bn3 = nn.BatchNorm1d(num_features=num_output_vectors)
+        
+        self.lstm = nn.LSTM(
+            input_size=num_output_vectors,
+            hidden_size=hidden_size,
+            proj_size=num_output_vectors,
+            batch_first=True,
+            num_layers=lstm_num_layers,
+            bidirectional=lstm_bidirectional
+        )
+        
+    def forward(self,inputs):
+        
+        time_series = inputs
+        
+        # first we put the input through the convolutional part
+        x = self.c1(time_series)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.c2(x)
+        x = self.bn2(x)
+        x = self.relu(x)
+        x = self.c3(x)
+        x = self.bn3(x)
+        x = self.relu(x)
+        x = x.permute(0,2,1)
+        
+        lstm_out, temp = self.lstm(x)
+        
+        if lstm_bidirectional:
+            prediction = (lstm_out[:,:,0]+lstm_out[:,:,1]).unsqueeze(-1)
+        else:
+            prediction = lstm_out
+        return prediction
 
 # neural network that wraps around a time series predicting neural network and modifies its output to be more specific for subject demographics (body mass, body height, age, sex)
 class DemographicScaler(nn.Module):
