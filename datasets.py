@@ -16,6 +16,7 @@ class CustomTimeSeriesDataset(Dataset):
         """
 
         # max number of samples to read; if this is exceeded, nothing is read any longer
+        # default 50000 should be enough; using a number like 300 will make prototyping faster
         self.max_rows = 50000
         
         # this will store the length of a single sequence of a single feature in a sample; None indicates it hasn't been set yet
@@ -246,13 +247,15 @@ class CustomTimeSeriesDataset(Dataset):
                 labels_jointangles.append(unique_cols[i_col])
             elif '_jointmoments_' in unique_cols[i_col]:
                 idx_jointmoments.append(i_col)
-            elif '_contactforces_' in unique_cols[i_col]:
+            elif '_contactforces_kcf_medial' in unique_cols[i_col]:
                 idx_contactforces.append(i_col)
                 labels_contactforces.append(unique_cols[i_col])
-                break # This break here tells us to stop reading columns after finding the first contact force column. Contact forces are last in column names, so despite breaking out of the loop, we'll have read the joint kinematics by then. Summed contact force should be the first contact force column, so we'll read only that instead of the others (medial/lateral/patellofemoral).
+                print(unique_cols[i_col])
+                #break # This break here tells us to stop reading columns after finding the first contact force column. Contact forces are last in column names, so despite breaking out of the loop, we'll have read the joint kinematics by then. Summed contact force should be the first contact force column, so we'll read only that instead of the others (medial/lateral/patellofemoral).
             
         #print(f'Index of joint angles: {idx_jointangles}')
         #print(f'Index of joint moments: {idx_jointmoments}')
+        print(f'Index of contact forces: {idx_contactforces}, labels: {labels_contactforces}')
         
         # split the data tensor to inputs and targets knowing that the first 12 labels are for joint kinematics (inputs) and the remaining 9 for joint moments (targets)
         self.input_time_series = data[:,idx_jointangles,:]
@@ -267,12 +270,12 @@ class CustomTimeSeriesDataset(Dataset):
             for i, label in enumerate(labels_jointangles):
                 for key in self.kinematics_bounds.keys():
                     if key in label:
-                        self.input_time_series[:,i,:] =self.__normalize(self.input_time_series[:,i,:], key)
+                        self.input_time_series[:,i,:] = self.__normalize(self.input_time_series[:,i,:], key)
                         break
             for i, label in enumerate(labels_contactforces):
                 for key in self.kinetics_bounds.keys():
                     if key in label:
-                        self.target_time_series[:,i,:] =self.__normalize(self.target_time_series[:,i,:], key)
+                        self.target_time_series[:,i,:] = self.__normalize(self.target_time_series[:,i,:], key)
                         break
 
     # get a list of unique column labels of time series variables
@@ -305,7 +308,9 @@ class CustomTimeSeriesDataset(Dataset):
         """
         # read all time series data into a tensor
         data = torch.empty(len(dataframe.index), len(unique_cols), self.sequence_length)
+        # for each row (as indicated by DataFrame.index)
         for s in range(len(dataframe.index)):
+            # for each unique column
             for i_col in range(len(unique_cols)):
                 for i in range(0,self.sequence_length):
                     current_col = unique_cols[i_col] + '_' + str(i+1)
