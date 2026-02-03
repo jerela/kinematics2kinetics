@@ -18,6 +18,7 @@ def save_sample_figure(data, name):
     plt.legend()
     full_path = os.path.join(path_output, 'Figures', f'samples_{name}.png')
     plt.savefig(full_path)
+    plt.close()
 
 # save training and validation losses as subplots in one figure
 def save_loss_figure(losses, name):
@@ -36,6 +37,7 @@ def save_loss_figure(losses, name):
     
     full_path = os.path.join(path_output, 'Figures', f'losses_{name}.png')
     plt.savefig(full_path)
+    plt.close()
     
 
 class Plotter():
