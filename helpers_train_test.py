@@ -8,7 +8,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from datasets import CustomTimeSeriesDataset
-from networks import KineticsLSTM, KineticsFFN, KineticsCNN, KineticsCNN2D, KineticsGRU, WeightedMSELoss, DemographicScaler
+from networks import KineticsLSTM, KineticsFFN, KineticsCNN, KineticsCNN2D, KineticsGRU, KineticsCNNLSTM, KineticsMLSTMFCN, WeightedMSELoss, DemographicScaler
 from visualization import Plotter, save_loss_figure, save_sample_figure
 from options import batch_size, early_stopping_threshold, max_epochs, file_dataset, lr_initial, plot_losses, plot_sample, workers, path_output
 
@@ -183,224 +183,74 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
 
 
 
-
-
 def run_kfold_gru():
-    
-    dataset = CustomTimeSeriesDataset(file_dataset)
-    
-    n_inputs, n_targets = dataset.get_num_features()
-    
-    k = 5
-    idxs = dataset.kfold(k)
-    
-    
-    layers = (1,2,3,4,5)
-    
-    loss_per_layer = []
-    
-    # loop through the number of layers for loss evaluation and hyperparameter selection
-    for j in range(len(layers)):
-        num_layers = layers[j]
-        
-    
-        losses = []
-        # loop through each fold
-        for i in range(k):
-            model = KineticsGRU(n_inputs,n_targets,num_layers,name=f'GRU_{num_layers}layers_fold{i+1}')
-            print(f'- - - FOLD {i+1} - - -')
-            print(f'Dataset length: {len(dataset)}, numbers of indices: {len(idxs[i])}')
-            # construct training and validation set for each fold by concatenating the indices in all but one fold (training) and counting the indices in the leftover fold (validation)
-            idx_training = []
-            idx_validation = []
-            for j in range(k):
-                if i == j:
-                    idx_validation = idxs[i]
-                else:
-                    idx_training = idx_training + idxs[j]
-            training_set = dataset.subset(idx_training)
-            validation_set = dataset.subset(idx_validation)
-            training_output = train(model=model, training_set=training_set, validation_set=validation_set, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
-            validation_loss = training_output['validation_loss'][-1]
-            losses.append(validation_loss)
-            
-            
-        mean_loss = statistics.fmean(losses)
-        print(f'All {k} folds iterated. Losses: {losses}, mean loss: {mean_loss}')
-        loss_per_layer.append(mean_loss)
-        
-    
-    print(f'Numbers of layers: {layers}, corresponding losses: {loss_per_layer}')
-    # find the number of layers with the smallest mean loss over all folds
-    min_loss = float('inf')
-    min_idx = -1
-    for i,value in enumerate(loss_per_layer):
-        if value < min_loss:
-            min_loss = value
-            min_idx = i
-    print(f'Smallest loss of {min_loss} at {layers[min_idx]} layers.')
-
+    hyperparams = ['num_layers', (1,2,4,8)]
+    run_kfold_validation(model_kinetics=KineticsGRU, model_name='GRU', hyperparameters=hyperparams)
 
 def run_kfold_cnn():
-    
-    dataset = CustomTimeSeriesDataset(file_dataset)
-    
-    n_inputs, n_targets = dataset.get_num_features()
-    sequence_length = dataset.get_sequence_length()
-    print(f'Sequence length: {sequence_length}')
-    
-    k = 5
-    idxs = dataset.kfold(k)
-    
-    
-    hyperparameter_kernel_sizes = (7,9)
-    
-    loss_per_hyperparameter = []
-    
-    # loop through the number of hyperparameters for loss evaluation and hyperparameter selection
-    for j in range(len(hyperparameter_kernel_sizes)):
-        kernel_size = hyperparameter_kernel_sizes[j]
-        
-    
-        losses = []
-        # loop through each fold
-        for i in range(k):
-            # first, we instantiate a model for predicting the time series from input time series
-            ts_model = KineticsCNN(n_inputs,n_targets,kernel_size=kernel_size,name=f'CNN_kernelsize{kernel_size}_fold{i+1}')
-            # then, we instantiate a model that incorporates the time series model and additionally applies scaling based on demographics
-            model = DemographicScaler(time_series_model=ts_model, num_input_vectors=n_inputs, num_output_vectors=n_targets, sequence_length=sequence_length, name=f'Demographic_CNN_kernelsize{kernel_size}_fold{i+1}')
-            print(f'- - - FOLD {i+1} - - -')
-            print(f'Dataset length: {len(dataset)}, numbers of indices: {len(idxs[i])}')
-            # construct training and validation set for each fold by concatenating the indices in all but one fold (training) and counting the indices in the leftover fold (validation)
-            idx_training = []
-            idx_validation = []
-            for j in range(k):
-                if i == j:
-                    idx_validation = idxs[i]
-                else:
-                    idx_training = idx_training + idxs[j]
-            training_set = dataset.subset(idx_training)
-            validation_set = dataset.subset(idx_validation)
-            training_output = train(model=model, training_set=training_set, validation_set=validation_set, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
-            validation_loss = training_output['validation_loss'][-1]
-            losses.append(validation_loss)
-            
-            
-        mean_loss = statistics.fmean(losses)
-        print(f'All {k} folds iterated. Losses: {losses}, mean loss: {mean_loss}')
-        loss_per_hyperparameter.append(mean_loss)
-        
-    
-    print(f'Kernel sizes: {hyperparameter_kernel_sizes}, corresponding losses: {loss_per_hyperparameter}')
-    # find the kernel size with the smallest mean loss over all folds
-    min_loss = float('inf')
-    min_idx = -1
-    for i,value in enumerate(loss_per_hyperparameter):
-        if value < min_loss:
-            min_loss = value
-            min_idx = i
-    print(f'Smallest loss of {min_loss} at kernel size {hyperparameter_kernel_sizes[min_idx]}.')
-
+    hyperparams = ['kernel_size', (7,9)]
+    run_kfold_validation(model_kinetics=KineticsCNN, model_name='CNN', hyperparameters=hyperparams)
 
 def run_kfold_cnn2d():
-    
-    dataset = CustomTimeSeriesDataset(file_dataset)
-    
-    n_inputs, n_targets = dataset.get_num_features()
-    sequence_length = dataset.get_sequence_length()
-    print(f'Sequence length: {sequence_length}')
-    
-    k = 5
-    idxs = dataset.kfold(k)
-    
-    
-    hyperparameter_kernel_widths = (7,9)
-    
-    loss_per_hyperparameter = []
-    
-    # loop through the number of hyperparameters for loss evaluation and hyperparameter selection
-    for j in range(len(hyperparameter_kernel_widths)):
-        kernel_width = hyperparameter_kernel_widths[j]
-        
-    
-        losses = []
-        # loop through each fold
-        for i in range(k):
-            # first, we instantiate a model for predicting the time series from input time series
-            ts_model = KineticsCNN2D(n_inputs,n_targets,kernel_width=kernel_width,name=f'CNN2D_kernelwidth{kernel_width}_fold{i+1}')
-            # then, we instantiate a model that incorporates the time series model and additionally applies scaling based on demographics
-            model = DemographicScaler(time_series_model=ts_model, num_input_vectors=n_inputs, num_output_vectors=n_targets, sequence_length=sequence_length, name=f'Demographic_CNN2D_kernelwidth{kernel_width}_fold{i+1}')
-            print(f'- - - FOLD {i+1} - - -')
-            print(f'Dataset length: {len(dataset)}, numbers of indices: {len(idxs[i])}')
-            # construct training and validation set for each fold by concatenating the indices in all but one fold (training) and counting the indices in the leftover fold (validation)
-            idx_training = []
-            idx_validation = []
-            for j in range(k):
-                if i == j:
-                    idx_validation = idxs[i]
-                else:
-                    idx_training = idx_training + idxs[j]
-            training_set = dataset.subset(idx_training)
-            validation_set = dataset.subset(idx_validation)
-            training_output = train(model=model, training_set=training_set, validation_set=validation_set, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
-            validation_loss = training_output['validation_loss'][-1]
-            losses.append(validation_loss)
-            
-            
-        mean_loss = statistics.fmean(losses)
-        print(f'All {k} folds iterated. Losses: {losses}, mean loss: {mean_loss}')
-        loss_per_hyperparameter.append(mean_loss)
-        
-    
-    print(f'Kernel widths: {hyperparameter_kernel_widths}, corresponding losses: {loss_per_hyperparameter}')
-    # find the kernel size with the smallest mean loss over all folds
-    min_loss = float('inf')
-    min_idx = -1
-    for i,value in enumerate(loss_per_hyperparameter):
-        if value < min_loss:
-            min_loss = value
-            min_idx = i
-    print(f'Smallest loss of {min_loss} at kernel width {hyperparameter_kernel_widths[min_idx]}.')
-
+    hyperparams = ['kernel_width', (7,9)]
+    run_kfold_validation(model_kinetics=KineticsCNN2D, model_name='CNN', hyperparameters=hyperparams)
 
 def run_kfold_lstm():
-    
+    #hyperparams = ['hidden_size', (10,20,32,64,128)]
+    hyperparams = ['hidden_size', [20]]
+    run_kfold_validation(model_kinetics=KineticsLSTM, model_name='LSTM', hyperparameters=hyperparams)
+
+def run_kfold_cnnlstm():
+    hyperparams = ['hidden_size', [20]]
+    args_kinetics = {'kernel_size': 7}
+    run_kfold_validation(model_kinetics=KineticsCNNLSTM, model_name='CNN-LSTM', hyperparameters=hyperparams, kinetics_arguments=args_kinetics)
+
+def run_kfold_mlstmfcn():
+    hyperparams = ['hidden_size', [20]]
+    run_kfold_validation(model_kinetics=KineticsMLSTMFCN, model_name='MLSTM-CNN', hyperparameters=hyperparams)
+
+# generic function for running k-fold cross-validation with different models
+def run_kfold_validation(model_kinetics, hyperparameters, kinetics_arguments={}, num_folds=5, model_name='unnamed'):
     dataset = CustomTimeSeriesDataset(file_dataset)
     
     n_inputs, n_targets = dataset.get_num_features()
     sequence_length = dataset.get_sequence_length()
-    print(f'Sequence length: {sequence_length}')
     
-    k = 5
+    args_kinetics = {'num_input_vectors': n_inputs, 'num_output_vectors': n_targets}
+    
+    k = num_folds
     idxs = dataset.kfold(k)
-    
-    
-    hyperparameter_hidden_sizes = (10,20,64,128)
     
     loss_per_hyperparameter = []
     
+    hyperparameter_name = hyperparameters[0]
+    hyperparameter_values = hyperparameters[1]
+
     # loop through the number of hyperparameters for loss evaluation and hyperparameter selection
-    for j in range(len(hyperparameter_hidden_sizes)):
-        hidden_size = hyperparameter_hidden_sizes[j]
+    for j in range(len(hyperparameter_values)):
         
-    
+        args_hyperparams = {hyperparameter_name: hyperparameter_values[j]}
+        args_kinetics_full = args_hyperparams | args_kinetics | kinetics_arguments
+        
         losses = []
         # loop through each fold
         for i in range(k):
+            
+            kinetics_model_name = f'{model_name}_{hyperparameter_name}_{hyperparameter_values[j]}_fold{i+1}'
             # first, we instantiate a model for predicting the time series from input time series
-            ts_model = KineticsLSTM(n_inputs,n_targets,hidden_size=hidden_size,name=f'LSTM_hiddensize{hidden_size}_fold{i+1}')
+            ts_model = model_kinetics(**args_kinetics_full, name=kinetics_model_name)
             # then, we instantiate a model that incorporates the time series model and additionally applies scaling based on demographics
-            model = DemographicScaler(time_series_model=ts_model, num_input_vectors=n_inputs, num_output_vectors=n_targets, sequence_length=sequence_length, name=f'Demographic_LSTM_hiddensize{hidden_size}_fold{i+1}')
+            model = DemographicScaler(num_input_vectors=n_inputs, num_output_vectors=n_targets, sequence_length=sequence_length, time_series_model=ts_model, name=f'Demographic_{kinetics_model_name}')
             print(f'- - - FOLD {i+1} - - -')
             print(f'Dataset length: {len(dataset)}, numbers of indices: {len(idxs[i])}')
             # construct training and validation set for each fold by concatenating the indices in all but one fold (training) and counting the indices in the leftover fold (validation)
             idx_training = []
             idx_validation = []
-            for j in range(k):
-                if i == j:
+            for m in range(k):
+                if i == m:
                     idx_validation = idxs[i]
                 else:
-                    idx_training = idx_training + idxs[j]
+                    idx_training = idx_training + idxs[m]
             training_set = dataset.subset(idx_training)
             validation_set = dataset.subset(idx_validation)
             training_output = train(model=model, training_set=training_set, validation_set=validation_set, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
@@ -413,7 +263,7 @@ def run_kfold_lstm():
         loss_per_hyperparameter.append(mean_loss)
         
     
-    print(f'Hidden sizes: {hyperparameter_hidden_sizes}, corresponding losses: {loss_per_hyperparameter}')
+    print(f'Variations of hyperparameter {hyperparameter_name}: {hyperparameter_values}, corresponding losses: {loss_per_hyperparameter}')
     # find the hidden size with the smallest mean loss over all folds
     min_loss = float('inf')
     min_idx = -1
@@ -421,73 +271,4 @@ def run_kfold_lstm():
         if value < min_loss:
             min_loss = value
             min_idx = i
-    print(f'Smallest loss of {min_loss} at hidden size {hyperparameter_hidden_sizes[min_idx]}.')
-
-
-
-
-
-
-def run_kfold_gru():
-    
-    dataset = CustomTimeSeriesDataset(file_dataset)
-    
-    n_inputs, n_targets = dataset.get_num_features()
-    sequence_length = dataset.get_sequence_length()
-    print(f'Sequence length: {sequence_length}')
-    
-    k = 5
-    idxs = dataset.kfold(k)
-    
-    
-    hyperparameter_layer_amount = (1,2,4,8)
-    
-    loss_per_hyperparameter = []
-    
-    # loop through the number of hyperparameters for loss evaluation and hyperparameter selection
-    for j in range(len(hyperparameter_layer_amount)):
-        num_layers = hyperparameter_layer_amount[j]
-        
-    
-        losses = []
-        # loop through each fold
-        for i in range(k):
-            # first, we instantiate a model for predicting the time series from input time series
-            ts_model = KineticsGRU(n_inputs,n_targets,num_layers=num_layers,name=f'GRU_{num_layers}layers_fold{i+1}')
-            # then, we instantiate a model that incorporates the time series model and additionally applies scaling based on demographics
-            model = DemographicScaler(time_series_model=ts_model, num_input_vectors=n_inputs, num_output_vectors=n_targets, sequence_length=sequence_length)
-            print(f'- - - FOLD {i+1} - - -')
-            print(f'Dataset length: {len(dataset)}, numbers of indices: {len(idxs[i])}')
-            # construct training and validation set for each fold by concatenating the indices in all but one fold (training) and counting the indices in the leftover fold (validation)
-            idx_training = []
-            idx_validation = []
-            for j in range(k):
-                if i == j:
-                    idx_validation = idxs[i]
-                else:
-                    idx_training = idx_training + idxs[j]
-            training_set = dataset.subset(idx_training)
-            validation_set = dataset.subset(idx_validation)
-            training_output = train(model=model, training_set=training_set, validation_set=validation_set, n_epochs=max_epochs, early_stopping=early_stopping_threshold, lr=lr_initial, plot_losses=plot_losses, plot_sample=plot_sample)
-            validation_loss = training_output['validation_loss'][-1]
-            losses.append(validation_loss)
-            
-            
-        mean_loss = statistics.fmean(losses)
-        print(f'All {k} folds iterated. Losses: {losses}, mean loss: {mean_loss}')
-        loss_per_hyperparameter.append(mean_loss)
-        
-    
-    print(f'Numbers of layers: {hyperparameter_layer_amount}, corresponding losses: {loss_per_hyperparameter}')
-    # find the hidden size with the smallest mean loss over all folds
-    min_loss = float('inf')
-    min_idx = -1
-    for i,value in enumerate(loss_per_hyperparameter):
-        if value < min_loss:
-            min_loss = value
-            min_idx = i
-    print(f'Smallest loss of {min_loss} at {hyperparameter_layer_amount[min_idx]} layers.')
-
-
-
-
+    print(f'Smallest loss of {min_loss} at {hyperparameter_name} value {hyperparameter_values[min_idx]}.')
