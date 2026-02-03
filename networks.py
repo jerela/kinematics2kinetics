@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from options import lstm_num_layers, lstm_bidirectional
 """
 METHODS/ARCHITECTURES TO EXPLORE:
 - (S)ARIMA(X) (https://www.sktime.net/en/v0.40.1/api_reference/auto_generated/sktime.forecasting.sarimax.SARIMAX.html)
@@ -298,8 +297,10 @@ class KineticsGRU(nn.Module):
 
 # long short-term memory network
 class KineticsLSTM(nn.Module):
-    def __init__(self, num_input_vectors, num_output_vectors, hidden_size=20, name='KineticsLSTM'):
+    def __init__(self, num_input_vectors, num_output_vectors, hidden_size=20, num_layers=1, bidirectional=True, name='KineticsLSTM'):
         super().__init__()
+        
+        self.bidirectional = bidirectional
         
         self.model_name = name
         
@@ -308,13 +309,9 @@ class KineticsLSTM(nn.Module):
             hidden_size=hidden_size,
             proj_size=num_output_vectors,
             batch_first=True,
-            num_layers=lstm_num_layers,
-            bidirectional=lstm_bidirectional
+            num_layers=num_layers,
+            bidirectional=bidirectional
         )
-        
-
-        self.fc = nn.Linear(1,1)
-        self.sigmoid = nn.Sigmoid()
         
     def forward(self,inputs):
         
@@ -328,7 +325,7 @@ class KineticsLSTM(nn.Module):
         # lstm_out now contains the short-term memory values from each unrolled LSTM unit
         
         # if we use a bidirectional LSTM, the output will be a concatenation of the forward and hidden states so we want to sum them together to maintain our data shape
-        if lstm_bidirectional:
+        if self.bidirectional:
             prediction = (lstm_out[:,:,0]+lstm_out[:,:,1]).unsqueeze(-1)
         else:
             prediction = lstm_out
@@ -336,12 +333,14 @@ class KineticsLSTM(nn.Module):
 
 # a network where convolutional blocks are first used to find features that are then fed to LSTM
 class KineticsCNNLSTM(nn.Module):
-    def __init__(self, num_input_vectors, num_output_vectors, kernel_size=1, hidden_size=20, name='KineticsCNNLSTM'):
+    def __init__(self, num_input_vectors, num_output_vectors, kernel_size=1, hidden_size=20, lstm_num_layers=1, lstm_bidirectional=True, name='KineticsCNNLSTM'):
         super().__init__()
         
         self.model_name = name
         
         self.relu = nn.ReLU()
+        
+        self.lstm_bidirectional = lstm_bidirectional
         
         self.c1 = nn.Conv1d(
             in_channels=num_input_vectors,
@@ -376,14 +375,8 @@ class KineticsCNNLSTM(nn.Module):
         )
         self.bn3 = nn.BatchNorm1d(num_features=num_output_vectors)
         
-        self.lstm = nn.LSTM(
-            input_size=num_output_vectors,
-            hidden_size=hidden_size,
-            proj_size=num_output_vectors,
-            batch_first=True,
-            num_layers=lstm_num_layers,
-            bidirectional=lstm_bidirectional
-        )
+        # num_input_vectors and num_output_vectors parameters are both given the value of num_output_vectors because the CNN has already transformed the input to the shape of the output
+        self.lstm = KineticsLSTM(num_input_vectors=num_output_vectors, num_output_vectors=num_output_vectors, hidden_size=hidden_size, num_layers=lstm_num_layers, bidirectional=lstm_bidirectional)
         
     def forward(self,inputs):
         
@@ -399,15 +392,106 @@ class KineticsCNNLSTM(nn.Module):
         x = self.c3(x)
         x = self.bn3(x)
         x = self.relu(x)
-        x = x.permute(0,2,1)
         
-        lstm_out, temp = self.lstm(x)
+        prediction = self.lstm(x)
         
-        if lstm_bidirectional:
-            prediction = (lstm_out[:,:,0]+lstm_out[:,:,1]).unsqueeze(-1)
-        else:
-            prediction = lstm_out
         return prediction
+
+
+class SqueezeAndExcitation(nn.Module):
+    def __init__(self, num_channels):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool1d(1)
+        self.fc1 = nn.Conv1d(num_channels, 16, kernel_size=1)
+        self.fc2 = nn.Conv1d(16, num_channels, kernel_size=1)
+        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, inputs):
+        x = self.avg_pool(inputs)
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.fc2(x)
+        x = self.sigmoid(x)
+        return x*inputs
+
+class KineticsMLSTMFCN(nn.Module):
+    def __init__(self, num_input_vectors, num_output_vectors, hidden_size, lstm_num_layers=1, lstm_bidirectional=True, name='KineticsMLSTMFCN'):
+        super().__init__()
+        
+        self.model_name = name
+        
+        num_filters_c1 = num_input_vectors*8
+        num_filters_c2 = num_input_vectors*16
+        num_filters_c3 = num_input_vectors*8
+        
+        self.lstm = KineticsLSTM(num_input_vectors=num_input_vectors, num_output_vectors=num_output_vectors, hidden_size=hidden_size, num_layers=lstm_num_layers, bidirectional=lstm_bidirectional)
+        
+        self.c1 = nn.Conv1d(
+            in_channels=num_input_vectors,
+            out_channels=num_filters_c1,
+            kernel_size=7,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
+        )
+        self.c2 = nn.Conv1d(
+            in_channels=num_filters_c1,
+            out_channels=num_filters_c2,
+            kernel_size=5,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
+        )
+        self.c3 = nn.Conv1d(
+            in_channels=num_filters_c2,
+            out_channels=num_filters_c3,
+            kernel_size=3,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
+        )
+
+        self.bn1 = nn.BatchNorm1d(num_filters_c1)
+        self.bn2 = nn.BatchNorm1d(num_filters_c2)
+        self.bn3 = nn.BatchNorm1d(num_filters_c3)
+
+        self.se1 = SqueezeAndExcitation(num_filters_c1)
+        self.se2 = SqueezeAndExcitation(num_filters_c2)
+
+        self.relu = nn.ReLU()
+        
+        self.lstm_scale = nn.Parameter(torch.randn(1))
+    
+    def forward(self, inputs):
+        x = inputs
+        x1 = self.lstm(x)
+        x1 = self.lstm_scale*x1
+        
+        x2 = self.c1(x)
+        x2 = self.bn1(x2)
+        x2 = self.relu(x2)
+        x2 = self.se1(x2)
+        
+        x2 = self.c2(x2)
+        x2 = self.bn2(x2)
+        x2 = self.relu(x2)
+        x2 = self.se2(x2)
+        
+        x2 = self.c3(x2)
+        x2 = self.bn3(x2)
+        x2 = self.relu(x2)
+        
+        # global pooling by calculating the mean over all channels to get just one channel, so that it can be concatenated with the output of the LSTM
+        x2 = torch.mean(x2,1)
+        x2 = x2.unsqueeze(2)
+        
+        prediction = x1+x2
+        return prediction
+
 
 # neural network that wraps around a time series predicting neural network and modifies its output to be more specific for subject demographics (body mass, body height, age, sex)
 class DemographicScaler(nn.Module):
@@ -458,7 +542,7 @@ class DemographicScaler(nn.Module):
         x = x.reshape((batch_size,self.num_output_vectors,self.sequence_length))
         # mimic a low-pass filter by averaging in order to create the scaling mask
         x = F.avg_pool1d(x, kernel_size=self.denoise_filter_width, stride=1, padding=self.denoise_filter_padding, count_include_pad=False)
-
+        
         # move the dimensions so that the order is (BATCH, SEQUENCE, FEATURES) where FEATURES can also be called CHANNELS (e.g., if the time series has 250 data points, those are in SEQUENCE, and if it has 4 loading features, those are in FEATURES)
         x = x.permute(0,2,1)        
         # scale each value in the kinetics time series by the scaling mask (x)
