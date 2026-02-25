@@ -187,15 +187,27 @@ class CustomTimeSeriesDataset(Dataset):
         Implements min-max normalization to scale data so that the given minimum and maximum boundaries are mapped to 0 and 1. Does not enforce that all data must be in the range [0,1].
         For example, if mass is scaled between 50 and 150, then 50 kgs will be mapped to 0, 150 kgs will be mapped to 1, 100 kgs will be mapped to 0.5, values below 50 kgs will be mapped to negative numbers, and values above 150 kgs will be mapped to numbers greater than 1.
         """
+        is_scalar = False
         if key in self.scalar_bounds.keys():
             bounds = self.scalar_bounds
+            is_scalar = True
         elif key in self.kinematics_bounds.keys():
             bounds = self.kinematics_bounds
         elif key in self.kinetics_bounds.keys():
             bounds = self.kinetics_bounds
         else:
             raise Exception(f'Error while normalizing! Key {key} not found in any of the boundary value dictionaries!')
-        return (data - bounds[key][0]) / (bounds[key][1] - bounds[key][0])
+        
+        # if the normalizable data is a scalar, we do standard normalization
+        # otherwise, it is a time series and we do not want to offset the trailing zeros; hence, we save their indices and set them back to zero after normalization
+        if is_scalar:
+            scaled_data = (data - bounds[key][0]) / (bounds[key][1] - bounds[key][0])
+        else:
+            zeros = torch.abs(data) < 1e-12
+            scaled_data = (data - bounds[key][0]) / (bounds[key][1] - bounds[key][0])
+            scaled_data[zeros] = 0.0
+        
+        return scaled_data
     
     # process all scalar-format data like subject demographics
     def __process_scalar_data(self,data_frame) -> None:
