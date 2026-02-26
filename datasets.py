@@ -22,7 +22,10 @@ class CustomTimeSeriesDataset(Dataset):
         # this will store the length of a single sequence of a single feature in a sample; None indicates it hasn't been set yet
         self.sequence_length = None
         
+        # whether to normalize the data using pre-defined boundaries
         self.normalize_data = True
+        # whether to center individual joint angle time series so that their mean is 0
+        self.center_kinematics_time_series = True
         if self.normalize_data:
             self.__initialize_bounds()
         
@@ -188,11 +191,13 @@ class CustomTimeSeriesDataset(Dataset):
         For example, if mass is scaled between 50 and 150, then 50 kgs will be mapped to 0, 150 kgs will be mapped to 1, 100 kgs will be mapped to 0.5, values below 50 kgs will be mapped to negative numbers, and values above 150 kgs will be mapped to numbers greater than 1.
         """
         is_scalar = False
+        is_kinematics = False
         if key in self.scalar_bounds.keys():
             bounds = self.scalar_bounds
             is_scalar = True
         elif key in self.kinematics_bounds.keys():
             bounds = self.kinematics_bounds
+            is_kinematics = True
         elif key in self.kinetics_bounds.keys():
             bounds = self.kinetics_bounds
         else:
@@ -206,6 +211,9 @@ class CustomTimeSeriesDataset(Dataset):
             zeros = torch.abs(data) < 1e-12
             scaled_data = (data - bounds[key][0]) / (bounds[key][1] - bounds[key][0])
             scaled_data[zeros] = 0.0
+            if self.center_kinematics_time_series and is_kinematics:
+                center = torch.mean(scaled_data[~zeros])
+                scaled_data[~zeros] -= center
         
         return scaled_data
     
