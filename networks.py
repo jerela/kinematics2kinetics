@@ -1,28 +1,21 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 """
 METHODS/ARCHITECTURES TO EXPLORE:
-- (S)ARIMA(X) (https://www.sktime.net/en/v0.40.1/api_reference/auto_generated/sktime.forecasting.sarimax.SARIMAX.html)
-- XGBOOST (https://www.sktime.net/en/v0.40.1/api_reference/auto_generated/sktime.forecasting.darts.DartsXGBModel.html)
-- LSTMFCN (https://www.sktime.net/en/v0.40.1/api_reference/auto_generated/sktime.regression.deep_learning.lstmfcn.LSTMFCNRegressor.html)
-- multivariate LSTM-FCN for classification reading: https://arxiv.org/pdf/1801.04503
-- ResNetRegressor (https://www.sktime.net/en/v0.40.1/api_reference/auto_generated/sktime.regression.deep_learning.resnet.ResNetRegressor.html)
-- parallel CNN+LSTM
-- first CNN, then feature maps to LSTM
-
 - LSTM-FCN PyTorch implementation: https://github.com/flaviagiammarino/lstm-fcn-pytorch/blob/main/lstm_fcn_pytorch/modules.py
 - MLSTM-FCN PyTorch implementation: https://github.com/alexmelekhin/MLSTM-FCN-Pytorch/blob/main/src/model.py
 
-- ADD DROPOUT TO LSTM
 """
 # mean square error function that puts less emphasis on values at the beginning and the end of the time series, to account for the high simulation nose in the beginning and end of contact force time series
 class WeightedMSELoss(nn.Module):
     """
     A custom loss function that computes the mean square error between the input and the target. Customized to disregard zeros in the target data using a weights mask.
     Note that the mean is calculated for all elements regardless of shape. Therefore, even if there are several kinetics features or several data samples in the batch, one scalar is returned for loss.
-    This loss should be used during training to compare different hyperparameter configurations, when the absolute value of the loss is irrelevant and only the relative losses matter.
+    Note also that the number of trailing zeros (result of zero-padding) will make this error smaller than the "real" error is.
+    This loss should be used during training to compare different hyperparameter configurations, when the absolute value of the loss (and its physical interpretation) is irrelevant and only the relative losses matter.
     """
     def __init__(self):
         super().__init__()
@@ -100,8 +93,6 @@ class KineticsCNN(nn.Module):
         
         self.model_name = name
         
-        
-        
         self.c1 = nn.Conv1d(
             in_channels=num_input_vectors,
             out_channels=num_output_vectors*8,
@@ -114,7 +105,6 @@ class KineticsCNN(nn.Module):
         self.bn1 = nn.BatchNorm1d(num_features=num_output_vectors*8)
         self.relu = nn.ReLU()
         
-        
         self.c2 = nn.Conv1d(
             in_channels=num_output_vectors*8,
             out_channels=num_output_vectors*16,
@@ -125,7 +115,6 @@ class KineticsCNN(nn.Module):
             padding_mode='zeros'
         )
         self.bn2 = nn.BatchNorm1d(num_features=num_output_vectors*16)
-        
         
         self.c3 = nn.Conv1d(
             in_channels=num_output_vectors*16,
@@ -148,8 +137,7 @@ class KineticsCNN(nn.Module):
             padding_mode='zeros'
         )
         self.bn4 = nn.BatchNorm1d(num_features=num_output_vectors)
-
-        
+    
     def forward(self, inputs):
         time_series = inputs
         batch_size = time_series.shape[0]
@@ -313,6 +301,8 @@ class KineticsLSTM(nn.Module):
             bidirectional=bidirectional
         )
         
+        self.lstm_scale = nn.Parameter(torch.randn(1))
+        
     def forward(self,inputs):
         
         time_series = inputs
@@ -329,6 +319,7 @@ class KineticsLSTM(nn.Module):
             prediction = (lstm_out[:,:,0]+lstm_out[:,:,1]).unsqueeze(-1)
         else:
             prediction = lstm_out
+        prediction = self.lstm_scale*prediction
         return prediction
 
 # a network where convolutional blocks are first used to find features that are then fed to LSTM
@@ -393,11 +384,12 @@ class KineticsCNNLSTM(nn.Module):
         x = self.bn3(x)
         x = self.relu(x)
         
+        # then through an LSTM
         prediction = self.lstm(x)
         
         return prediction
 
-
+# a squeeze-and-excitation block for the MLSTM-FCN model
 class SqueezeAndExcitation(nn.Module):
     def __init__(self, num_channels):
         super().__init__()
@@ -415,6 +407,7 @@ class SqueezeAndExcitation(nn.Module):
         x = self.sigmoid(x)
         return x*inputs
 
+# a multivariate LSTM-FCN constructed after https://arxiv.org/abs/1801.04503
 class KineticsMLSTMFCN(nn.Module):
     def __init__(self, num_input_vectors, num_output_vectors, hidden_size, lstm_num_layers=1, lstm_bidirectional=True, name='KineticsMLSTMFCN'):
         super().__init__()
@@ -463,13 +456,10 @@ class KineticsMLSTMFCN(nn.Module):
         self.se2 = SqueezeAndExcitation(num_filters_c2)
 
         self.relu = nn.ReLU()
-        
-        self.lstm_scale = nn.Parameter(torch.randn(1))
     
     def forward(self, inputs):
         x = inputs
         x1 = self.lstm(x)
-        x1 = self.lstm_scale*x1
         
         x2 = self.c1(x)
         x2 = self.bn1(x2)
@@ -493,6 +483,92 @@ class KineticsMLSTMFCN(nn.Module):
         return prediction
 
 
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, num_input_vectors, sequence_length, dropout, batch_first=True):
+        super().__init__()
+        
+        self.batch_first = batch_first
+        
+        position = torch.arange(0, sequence_length, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, num_input_vectors, 2).float() * (-math.log(10000.0) / num_input_vectors))
+        
+        pe = torch.zeros(sequence_length, num_input_vectors)
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe.unsqueeze(0)
+        
+        self.dropout = nn.Dropout(p = dropout)
+        
+        if not batch_first:
+            pe.transpose(1,0,2)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        if self.batch_first:
+            x = x + self.pe[:,:x.size(1)]
+        else:
+            x = x + self.pe[:x.size(0)]
+        x = self.dropout(x)
+        return x
+
+
+class KineticsTransformer(nn.Module):
+    def __init__(self, num_input_vectors, num_output_vectors, sequence_length, p_dropout, name='KineticsTransformer'):
+        super().__init__()
+        
+        self.model_name = name
+        
+        n_features = (num_input_vectors//2)*2
+        
+        # positional encoder can't handle an uneven number of features so we have to make them even with conv
+        self.c1 = nn.Conv1d(
+            in_channels=num_input_vectors,
+            out_channels=n_features,
+            kernel_size=1,
+            stride=1,
+            padding='same',
+            dilation=1,
+            padding_mode='zeros'
+        )
+        self.bn1 = nn.BatchNorm1d(num_features=n_features)
+        
+        self.pe = PositionalEncoding(
+            num_input_vectors = n_features,
+            sequence_length = sequence_length,
+            dropout = p_dropout,
+            batch_first = True
+        )
+        
+        self.encoder_layer = nn.TransformerEncoderLayer(
+            d_model = n_features,
+            nhead = 6,
+            dim_feedforward = 2048,
+            dropout = p_dropout,
+            batch_first = True
+        )
+        
+        self.encoder = nn.TransformerEncoder(
+            self.encoder_layer,
+            num_layers=6
+            )
+        
+        self.decoder = nn.Linear(
+            in_features = n_features,
+            out_features = num_output_vectors
+        )
+                
+    def forward(self,inputs):        
+        x = inputs
+        x = self.c1(x)
+        x = self.bn1(x)
+        x = x.permute(0,2,1)
+        x = self.pe(x)
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x
+
+
 # neural network that wraps around a time series predicting neural network and modifies its output to be more specific for subject demographics (body mass, body height, age, sex)
 class DemographicScaler(nn.Module):
     def __init__(self, time_series_model, num_input_vectors, num_output_vectors, sequence_length, name=None):
@@ -505,6 +581,7 @@ class DemographicScaler(nn.Module):
         self.num_output_vectors = num_output_vectors
         self.sequence_length = sequence_length
         
+        self.dropout = nn.Dropout(p=0.5)
         self.relu = nn.ReLU()
         self.fc1 = nn.Linear(4,16)
         self.fc2 = nn.Linear(16,64)
@@ -522,19 +599,17 @@ class DemographicScaler(nn.Module):
         
     def forward(self, inputs):
         
-        
-        # MUOKKAA: KINEMATICS -> 1DCONV -> FULLY CONNECTED -> YHDISTYY SKALAARIEN FULLY CONNECTEDEIHIN JA LUO TÄTEN LOPULLISEN KERROINMASKIN
-        
         scalars, time_series = inputs
         batch_size = scalars.shape[0]
         
         # predict the time series of kinetics from the time series of kinematics
         kinetics = self.time_series_model(time_series)
         
-        # process scalar inputs into a "mask" that we can apply over the CNN-estimated curve
+        # process scalar inputs into a "mask" that we can apply over the estimated curve
         x = self.fc1(scalars)
         x = self.relu(x)
         x = self.fc2(x)
+        x = self.dropout(x)
         x = self.relu(x)
         x = self.fc3(x)
         x = self.relu(x)
@@ -553,3 +628,108 @@ class DemographicScaler(nn.Module):
 
 
 
+# The demographic scaling classes/functions below are experimental.
+
+class GaussianFunction(nn.Module):
+    def __init__(self, num_gaussians):
+        super().__init__()
+        self.num_gaussians = num_gaussians
+    
+    def forward(self, inputs, max_lengths):
+        batch_size = max_lengths.shape[0]
+        # create a range with 250 elements, from 0 to 249
+        x = torch.arange(start=0, end=250, step=1).unsqueeze(0)
+        # repeat the range for all samples in the batch
+        x = x.repeat(batch_size,1)
+        # reshape the ranges to (BATCH, SEQUENCE, 1)
+        x = x.reshape(batch_size,250,1)
+        # repeat dim 2 for the number of gaussian functions
+        x = x.repeat(1,1,self.num_gaussians)
+        
+        # outputs of the hyperbolic tan are in the range [-1, 1], so we modify that by 2 to allow the mask to increase the magnitude of the kinetics curve
+        # the center of the gaussian is scaled to [0,1] times information length
+        # the width of the gaussian is scaled to [0,1] times information length
+        a = (inputs[:,0:self.num_gaussians]*2).unsqueeze(1)
+        b = ((inputs[:,self.num_gaussians:2*self.num_gaussians]+1)/2).unsqueeze(1)*(max_lengths.reshape(batch_size,1,1).repeat(1,1,self.num_gaussians))
+        c = ((inputs[:,2*self.num_gaussians:3*self.num_gaussians]+1)/2).unsqueeze(1)*(max_lengths.reshape(batch_size,1,1).repeat(1,1,self.num_gaussians))
+        
+        out = a*torch.exp(-torch.square(x-b)/torch.square(c))
+        # out shape: (batch, sequence, i_gaussian) -> dim 2 must be removed by summing
+        return out.sum(dim=2)
+
+# returns "information length", i.e., the number of data points in the time series that are not zero-padded
+class InformationLengthMeasurer(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self,tensors):
+        batch_size = tensors.shape[0]
+        time_series = tensors[:,0,:]
+        rightmost = torch.zeros(batch_size, dtype=torch.uint8)
+        for b in range(batch_size):
+            nonzeros = torch.abs(time_series[b,:]) > 1e-9
+            idx_info = torch.nonzero(nonzeros)
+            rightmost[b] = idx_info[-1]
+        return rightmost
+
+# Similar to DemographicScaler in the sense that is uses demographic info to apply a mask over the predicted kinetics; however, the mask is constructed from summed gaussian functions whose parameters are computed from demographic information
+# training is quite unstable though, so this should be considered experimental only
+class DemographicGaussian(nn.Module):
+    def __init__(self, time_series_model, num_input_vectors, num_output_vectors, sequence_length, name=None):
+        super().__init__()        
+        
+        if name:
+            self.model_name = name
+        else:
+            self.model_name = f'DemographicGaussian_{time_series_model.model_name}'
+        self.num_output_vectors = num_output_vectors
+        self.sequence_length = sequence_length
+        
+        # number of gaussian functions to sum and include in the mask; the more gaussians, the more likely the training is unable to converge
+        self.num_gaussians = 2
+        
+        # we include a hyperbolic tan activation to ensure the output is constrained in [-1,1]
+        self.relu = nn.ReLU()
+        self.tanh = nn.Tanh()
+        self.fc1 = nn.Linear(4,16)
+        self.fc2 = nn.Linear(16,64)
+        self.fc3 = nn.Linear(64,num_output_vectors*self.num_gaussians*3)
+
+        # a custom module that computes the values of the Gaussian function (points on a normal distribution)
+        self.gaussian = GaussianFunction(self.num_gaussians)
+        # gets the "information length" of a time series, i.e., the length of the time series without trailing padded zeros; used to scale the width and center of the Gaussians
+        self.infolength = InformationLengthMeasurer()
+
+        # this refers to the model that eats the time series of kinematics (e.g., lower limb joint angles) and vomits out the time series of kinetics (e.g., knee contact forces)
+        self.time_series_model = time_series_model
+        
+    def forward(self, inputs):
+        
+        scalars, time_series = inputs
+        batch_size = scalars.shape[0]
+        
+        # predict the time series of kinetics from the time series of kinematics
+        kinetics = self.time_series_model(time_series)
+        
+        # process scalar inputs into a "mask" that we can apply over the CNN-estimated curve
+        x = self.fc1(scalars)
+        x = self.relu(x)
+        x = self.fc2(x)
+        x = self.relu(x)
+        x = self.fc3(x)
+        x = self.tanh(x)
+        
+        #print(f'x: {x}')
+        
+        # initialize the gaussian mask as a bunch of zeros
+        gaussian_mask = torch.zeros(kinetics.size())
+        # get the information length of the input time series (assuming it still has trailing zeros from zero-padding)
+        information_length = self.infolength(time_series)
+        
+        for f in range(self.num_output_vectors):
+            gaussian_mask[:,:,f] += self.gaussian(x,information_length)
+            
+        # scale each value in the kinetics time series by the gaussian mask
+        x = kinetics * gaussian_mask
+        
+        return x
