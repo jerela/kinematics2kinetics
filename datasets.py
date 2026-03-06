@@ -2,7 +2,7 @@ import torch
 import copy
 from torch.utils.data import Dataset
 import pandas as pd
-from options import kinematics_bounds, kinetics_bounds, scalar_bounds
+from options import kinematics_bounds, kinetics_bounds, scalar_bounds, kinetics_variable
 
 class CustomTimeSeriesDataset(Dataset):
     """"
@@ -267,7 +267,7 @@ class CustomTimeSeriesDataset(Dataset):
                 labels_jointangles.append(unique_cols[i_col])
             elif '_jointmoments_' in unique_cols[i_col]:
                 idx_jointmoments.append(i_col)
-            elif '_contactforces_kcf_medial' in unique_cols[i_col]:
+            elif f'_contactforces_kcf_{kinetics_variable}' in unique_cols[i_col]:
                 idx_contactforces.append(i_col)
                 labels_contactforces.append(unique_cols[i_col])
                 print(unique_cols[i_col])

@@ -6,7 +6,7 @@ from datasets import CustomTimeSeriesDataset
 from networks import KineticsCNN, DemographicScaler
 
 from visualization import save_sample_figure
-from options import path_test_data, path_trained_model, scalar_bounds, kinetics_bounds, path_output_predicted_time_series
+from options import path_test_data, path_trained_model, scalar_bounds, kinetics_bounds, path_output_predicted_time_series, kinetics_variable
 from helpers_train_test import get_time_series
 
 import pandas as pd
@@ -66,7 +66,7 @@ def test(model, test_set):
             # compute the error for the currently iterated sample and append it to the list of errors; use RMSE that ignores the trailing zeros
             loss = loss_fn(i_output[:,:,0:info_length],i_target[:,:,0:info_length])
 
-            loss_N = denormalize(loss, kinetics_bounds['kcf_medial'])
+            loss_N = denormalize(loss, kinetics_bounds[f'kcf_{kinetics_variable}'])
             
             mass = denormalize(i_input_scalars[0,0], scalar_bounds['body_mass'])
             bw = mass*g
@@ -75,7 +75,7 @@ def test(model, test_set):
             losses_N.append(loss_N)            
             losses_bw_normalized.append(loss_N/bw)
             
-            predicted_time_series[i,:,:] = denormalize(i_output, kinetics_bounds['kcf_medial'])
+            predicted_time_series[i,:,:] = denormalize(i_output, kinetics_bounds[f'kcf_{kinetics_variable}'])
     
     # compute the final test error as the mean of the losses all samples
     test_loss = statistics.fmean(losses)
@@ -92,7 +92,7 @@ def test(model, test_set):
     df = pd.DataFrame(data=predicted_time_series.squeeze(1).numpy())
     print(df)
     
-    df.to_csv(path_output_predicted_time_series)
+    df.to_csv(f'{path_output_predicted_time_series}predicted_time_series_{kinetics_variable}.csv')
     
     # return the final test loss
     return (test_loss, test_loss_N, test_loss_bw_normalized)
