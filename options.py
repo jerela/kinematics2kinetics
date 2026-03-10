@@ -1,5 +1,13 @@
-# 'medial', 'lateral' or 'patellofemoral'
-kinetics_variable = 'patellofemoral'
+# which knee contact force to use as the target: 'medial', 'lateral' or 'patellofemoral'
+kinetics_variable = 'medial'
+
+# list of kinematics (generalized coordinate) variables to include in the input to the network
+included_generalized_coordinates = ['lumbar_extension', 'lumbar_rotation', 'lumbar_bending', 'pelvis_tilt', 'pelvis_list', 'pelvis_rotation', 'hip_flexion_primary', 'hip_adduction_primary', 'hip_rotation_primary', 'knee_angle_primary', 'ankle_angle_primary', 'hip_flexion_secondary', 'hip_adduction_secondary', 'hip_rotation_secondary', 'knee_angle_secondary', 'ankle_angle_secondary']
+#included_generalized_coordinates = ['pelvis_tilt', 'pelvis_list', 'pelvis_rotation', 'hip_flexion_primary', 'hip_adduction_primary', 'hip_rotation_primary', 'knee_angle_primary', 'ankle_angle_primary', 'hip_flexion_secondary', 'hip_adduction_secondary', 'hip_rotation_secondary', 'knee_angle_secondary', 'ankle_angle_secondary']
+#included_generalized_coordinates = ['hip_flexion_primary', 'hip_adduction_primary', 'hip_rotation_primary', 'knee_angle_primary', 'ankle_angle_primary', 'hip_flexion_secondary', 'hip_adduction_secondary', 'hip_rotation_secondary', 'knee_angle_secondary', 'ankle_angle_secondary']
+#included_generalized_coordinates = ['hip_flexion_primary', 'knee_angle_primary', 'ankle_angle_primary', 'hip_flexion_secondary', 'knee_angle_secondary', 'ankle_angle_secondary']
+#included_generalized_coordinates = ['hip_flexion_primary', 'knee_angle_primary', 'ankle_angle_primary']
+#included_generalized_coordinates = ['hip_rotation_secondary']
 
 # main/training settings
 rng_seed=1
@@ -10,7 +18,7 @@ path_output = 'C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output'
 batch_size=200
 early_stopping_threshold=100
 # 10 000 to be sure
-max_epochs=300#500#200
+max_epochs=10000#500#200
 
 workers=0
 
@@ -21,11 +29,13 @@ lr_initial=1e-2
 plot_losses=False
 plot_sample=False
 
-# test performance evaluation settings
-path_test_data='C:/Users/lavik/OneDrive/Documents/Polvineuro/Extracted/reference_test_data_padded.csv'
+# path to the test data containing input kinematics and output kinetics of the test set; markerless uses kinematics from the markerless method, while reference uses kinematics from motion capture marker-based IK through OpenSim
+path_test_data='C:/Users/lavik/OneDrive/Documents/Polvineuro/Extracted/markerless_test_data_padded.csv'
 
-path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/PATELLOFEMORAL_checkpoint_Demographic_CNN_full_kernelsize_7_epoch1353_finished.pt'
-#path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/MEDIAL_checkpoint_Demographic_CNN_full_kernelsize_7_epoch1420_finished.pt'
+# path to the trained model to use for making predictions in main_test.py
+#path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/PATELLOFEMORAL_checkpoint_Demographic_CNN_full_kernelsize_7_epoch1353_finished.pt'
+#path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/NEWMEDIAL_checkpoint_Demographic_CNN_full_kernelsize_7_epoch1420_finished.pt'
+path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/MEDIAL_checkpoint_Demographic_CNN_full_kernelsize_9_epoch478_finished.pt'
 #path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/LATERAL_checkpoint_Demographic_CNN_full_kernelsize_7_epoch1885_finished.pt'
 
 path_output_predicted_time_series='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Output/'

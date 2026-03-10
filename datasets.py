@@ -2,7 +2,7 @@ import torch
 import copy
 from torch.utils.data import Dataset
 import pandas as pd
-from options import kinematics_bounds, kinetics_bounds, scalar_bounds, kinetics_variable
+from options import kinematics_bounds, kinetics_bounds, scalar_bounds, kinetics_variable, included_generalized_coordinates
 
 class CustomTimeSeriesDataset(Dataset):
     """"
@@ -29,7 +29,16 @@ class CustomTimeSeriesDataset(Dataset):
         if self.normalize_data:
             self.__initialize_bounds()
         
-        df = pd.read_csv(file,nrows=self.max_rows)
+        
+        # only read the relevant columns from the CSV to save a little time (the columns defined through the included_generalized_coordinates and kinetics_variable variables in options.py)
+        col_labels = ['dataset', 'subject_name', 'trial_name', 'row', 'age', 'sex', 'body_height', 'body_mass', 'leg']
+        for gc in included_generalized_coordinates:
+            col_labels.append(f'padded_timeseries_jointangles_{gc}')
+        if kinetics_variable in ['medial', 'lateral', 'patellofemoral']:
+            col_labels.append(f'padded_timeseries_contactforces_kcf_{kinetics_variable}')
+        elif kinetics_variable in ['ekfm', 'ekam']:
+            col_labels.append(f'padded_timeseries_jointmoments_{kinetics_variable}')
+        df = pd.read_csv(file, nrows=self.max_rows, usecols=lambda c: any([(x in c) for x in col_labels]))
         print(f'Loaded DataFrame: {df}')
         
         self.__process_scalar_data(df)
@@ -261,11 +270,16 @@ class CustomTimeSeriesDataset(Dataset):
         idx_jointangles = []
         idx_jointmoments = []
         idx_contactforces = []
+        # loop through indices of unique columns found in the dataset file
         for i_col in range(len(unique_cols)):
+            # if a column is a joint angle time series and contains a label defined in included_generalized_coordinates, append the index of the column to idx_jointangles and the name of the column to labels_jointangles so they can be used to construct the input time series tensor and normalize it according to label names
             if '_jointangles_' in unique_cols[i_col]:
-                idx_jointangles.append(i_col)
-                labels_jointangles.append(unique_cols[i_col])
-            elif '_jointmoments_' in unique_cols[i_col]:
+                for gc in included_generalized_coordinates:
+                    if gc in unique_cols[i_col]:
+                        idx_jointangles.append(i_col)
+                        labels_jointangles.append(unique_cols[i_col])
+                        break
+            elif f'_jointmoments_{kinetics_variable}' in unique_cols[i_col]:
                 idx_jointmoments.append(i_col)
             elif f'_contactforces_kcf_{kinetics_variable}' in unique_cols[i_col]:
                 idx_contactforces.append(i_col)
@@ -277,7 +291,7 @@ class CustomTimeSeriesDataset(Dataset):
         #print(f'Index of joint moments: {idx_jointmoments}')
         print(f'Index of contact forces: {idx_contactforces}, labels: {labels_contactforces}')
         
-        # split the data tensor to inputs and targets knowing that the first 12 labels are for joint kinematics (inputs) and the remaining 9 for joint moments (targets)
+        # split the data tensor to inputs and targets knowing that the first labels are for joint kinematics (inputs) and the remaining for joint moments or contact forces (targets)
         self.input_time_series = data[:,idx_jointangles,:]
         if len(idx_jointmoments) > 0:
             self.target_time_series = data[:,idx_jointmoments,:]
