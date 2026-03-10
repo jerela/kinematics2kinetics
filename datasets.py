@@ -127,6 +127,7 @@ class CustomTimeSeriesDataset(Dataset):
             nonlocal subset_sizes
             nonlocal subset_indices
             subset_sizes[target_index] += n_selected_rows
+            subset_subjects[target_index] += 1
             for row in range(len(idx_rows)):
                 if idx_rows[row]:
                     subset_indices[target_index].append(row)
@@ -136,6 +137,7 @@ class CustomTimeSeriesDataset(Dataset):
         
         # we track the number of data rows in each of the subsets with subset_sizes, while subset_indices stores the corresponding row indices
         subset_sizes = [0 for x in fractions]
+        subset_subjects = [0 for x in fractions]
         subset_indices = [[] for x in fractions]
         # for each subject in a random order, place the trials of that subject in a subset, filling each subset one at a time
         n_subjects = len(self.unique_subject_ids)
@@ -167,6 +169,7 @@ class CustomTimeSeriesDataset(Dataset):
         [x.sort() for x in subset_indices]
         
         print(f'Final subset sizes: {subset_sizes}')
+        print(f'Final number of subjects per fraction: {subset_subjects}')
         print(f'Fractions of the final subset sizes: {[round(float(x)/sum(subset_sizes),2) for x in subset_sizes]}')
         return subset_indices
     
