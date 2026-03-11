@@ -19,6 +19,23 @@ def save_sample_figure(data, name):
     full_path = os.path.join(path_output, 'Figures', f'samples_{name}.png')
     plt.savefig(full_path)
     plt.close()
+    
+    # also save a figure that breaks down the constituents of the prediction (prediction based on kinematics and the mask based on demographics)
+    fig = plt.figure()
+    ts = data[0]['time_series']
+    kinematics_only = data[0]['kinematics_only']
+    demographics_only = data[0]['demographics_only']
+    target = ts[0]
+    prediction = ts[1]
+    plt.plot(target, 'b', label='target')
+    plt.plot(prediction, 'r', label='prediction')
+    plt.plot(kinematics_only, 'g', label='kinematics only')
+    plt.plot(demographics_only, 'g:', label='demographics only')
+    plt.legend()
+    full_path = os.path.join(path_output, 'Figures', f'breakdown_{name}.png')
+    plt.savefig(full_path)
+    plt.close()
+
 
 # save training and validation losses as subplots in one figure
 def save_loss_figure(losses, name):

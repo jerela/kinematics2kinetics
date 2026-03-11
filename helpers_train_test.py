@@ -8,7 +8,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from datasets import CustomTimeSeriesDataset
-from networks import KineticsLSTM, KineticsFFN, KineticsCNN, KineticsCNN2D, KineticsGRU, KineticsCNNLSTM, KineticsMLSTMFCN, WeightedMSELoss, DemographicScaler
+from networks import KineticsLSTM, KineticsFFN, KineticsCNN, KineticsCNN2D, KineticsGRU, KineticsCNNLSTM, KineticsMLSTMFCN, KineticsTransformer, WeightedMSELoss, DemographicScaler
 from visualization import Plotter, save_loss_figure, save_sample_figure
 from options import batch_size, early_stopping_threshold, max_epochs, file_dataset, lr_initial, plot_losses, plot_sample, workers, path_output
 
@@ -27,11 +27,20 @@ def get_time_series(model, dataset, loss_fn, n_samples=1, start_index=0):
             sample_input_time_series = sample_input_time_series.unsqueeze(0)
             sample_target = sample_target.unsqueeze(0).permute(0,2,1)
             output_trained = model((sample_input_scalars, sample_input_time_series)).detach()
+            
+            # extract the time series of the kinematics- and demographics-specific models so that they can also be plotted to visualize how they work
+            kinematics_only = model.time_series_model(sample_input_time_series).detach().squeeze(0)
+            demographics_only = model.scalar_mask(sample_input_scalars).detach().squeeze(0)
+            
             loss_trained = loss_fn(sample_target,output_trained)
+            
             plottable_data = (sample_target.detach().squeeze(0), output_trained.squeeze(0))
+            
             output.append({
                 'time_series': plottable_data,
-                'loss': loss_trained
+                'loss': loss_trained,
+                'kinematics_only': kinematics_only,
+                'demographics_only': demographics_only
             })
     return output
             
@@ -41,7 +50,6 @@ def get_time_series(model, dataset, loss_fn, n_samples=1, start_index=0):
 def save_checkpoint(checkpoint, name):
     full_path = os.path.join(path_output, 'Checkpoints', f'checkpoint_{name}.pt')
     torch.save(checkpoint, full_path)
-
 
 def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, early_stopping = 25, plot_losses=False, plot_sample=False):
     
@@ -91,6 +99,7 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
         training_loss = 0.0
         
         for i_input_scalars, i_input_time_series, i_target in data_loader_training:
+            
             i_output = model((i_input_scalars, i_input_time_series)).permute(0,2,1)
             
             loss = loss_fn(i_output,i_target)
@@ -188,7 +197,8 @@ def run_kfold_gru():
     run_kfold_validation(model_kinetics=KineticsGRU, model_name='GRU', hyperparameters=hyperparams)
 
 def run_kfold_cnn():
-    hyperparams = ['kernel_size', (7,9)]
+    hyperparams = ['kernel_size', [9]]
+    #hyperparams = ['kernel_size', [5,7,9,11]]
     run_kfold_validation(model_kinetics=KineticsCNN, model_name='CNN', hyperparameters=hyperparams)
 
 def run_kfold_cnn2d():
@@ -196,8 +206,8 @@ def run_kfold_cnn2d():
     run_kfold_validation(model_kinetics=KineticsCNN2D, model_name='CNN', hyperparameters=hyperparams)
 
 def run_kfold_lstm():
-    #hyperparams = ['hidden_size', (10,20,32,64,128)]
-    hyperparams = ['hidden_size', [20]]
+    #hyperparams = ['hidden_size', (20,50,100,150)]
+    hyperparams = ['hidden_size', [50]]
     run_kfold_validation(model_kinetics=KineticsLSTM, model_name='LSTM', hyperparameters=hyperparams)
 
 def run_kfold_cnnlstm():
@@ -206,8 +216,13 @@ def run_kfold_cnnlstm():
     run_kfold_validation(model_kinetics=KineticsCNNLSTM, model_name='CNN-LSTM', hyperparameters=hyperparams, kinetics_arguments=args_kinetics)
 
 def run_kfold_mlstmfcn():
-    hyperparams = ['hidden_size', [20]]
+    hyperparams = ['hidden_size', [50]]
     run_kfold_validation(model_kinetics=KineticsMLSTMFCN, model_name='MLSTM-CNN', hyperparameters=hyperparams)
+
+def run_kfold_xformer():
+    hyperparams = ['p_dropout', [0.1]]
+    args_kinetics = {'sequence_length': 250}
+    run_kfold_validation(model_kinetics=KineticsTransformer, model_name='Transformer', hyperparameters=hyperparams, kinetics_arguments=args_kinetics)
 
 # generic function for running k-fold cross-validation with different models
 def run_kfold_validation(model_kinetics, hyperparameters, kinetics_arguments={}, num_folds=5, model_name='unnamed'):
