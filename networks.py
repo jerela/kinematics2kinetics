@@ -581,11 +581,14 @@ class DemographicScaler(nn.Module):
         self.num_output_vectors = num_output_vectors
         self.sequence_length = sequence_length
         
+        # how many values the third linear layer should output in its raw mask time series
+        self.num_values_mask = 250
+        
         self.dropout = nn.Dropout(p=0.5)
         self.relu = nn.ReLU()
         self.fc1 = nn.Linear(4,16)
         self.fc2 = nn.Linear(16,64)
-        self.fc3 = nn.Linear(64,num_output_vectors*self.sequence_length)
+        self.fc3 = nn.Linear(64,num_output_vectors*self.num_values_mask)
 
         # this refers to the model that eats the time series of kinematics (e.g., lower limb joint angles) and vomits out the time series of kinetics (e.g., knee contact forces)
         self.time_series_model = time_series_model
@@ -597,15 +600,8 @@ class DemographicScaler(nn.Module):
             self.denoise_filter_width += 1
         self.denoise_filter_padding = int((self.denoise_filter_width-1)/2)
         
-    def forward(self, inputs):
-        
-        scalars, time_series = inputs
-        batch_size = scalars.shape[0]
-        
-        # predict the time series of kinetics from the time series of kinematics
-        kinetics = self.time_series_model(time_series)
-        
-        # process scalar inputs into a "mask" that we can apply over the estimated curve
+    def scalar_mask(self, scalars):
+        # through a series of linear layers, construct raw features for the scalar mask
         x = self.fc1(scalars)
         x = self.relu(x)
         x = self.fc2(x)
@@ -614,122 +610,39 @@ class DemographicScaler(nn.Module):
         x = self.fc3(x)
         x = self.relu(x)
         
-        x = x.reshape((batch_size,self.num_output_vectors,self.sequence_length))
+        # reshape the scalar mask to (BATCH, FEATURES, SEQUENCE), noting that SEQUENCE is not the original size of the input time series, but just 100 data points, which will be interpolated
+        batch_size = scalars.shape[0]
+        x = x.reshape((batch_size,self.num_output_vectors,self.num_values_mask))
         # mimic a low-pass filter by averaging in order to create the scaling mask
         x = F.avg_pool1d(x, kernel_size=self.denoise_filter_width, stride=1, padding=self.denoise_filter_padding, count_include_pad=False)
         
+        x_interp = self.interpolate_and_pad(x, self.information_length)
         # move the dimensions so that the order is (BATCH, SEQUENCE, FEATURES) where FEATURES can also be called CHANNELS (e.g., if the time series has 250 data points, those are in SEQUENCE, and if it has 4 loading features, those are in FEATURES)
-        x = x.permute(0,2,1)        
-        # scale each value in the kinetics time series by the scaling mask (x)
-        x = kinetics * x
+        mask = x_interp.permute(0,2,1)
         
-        
-        return x
+        return mask
 
-
-
-# The demographic scaling classes/functions below are experimental.
-
-class GaussianFunction(nn.Module):
-    def __init__(self, num_gaussians):
-        super().__init__()
-        self.num_gaussians = num_gaussians
-    
-    def forward(self, inputs, max_lengths):
-        batch_size = max_lengths.shape[0]
-        # create a range with 250 elements, from 0 to 249
-        x = torch.arange(start=0, end=250, step=1).unsqueeze(0)
-        # repeat the range for all samples in the batch
-        x = x.repeat(batch_size,1)
-        # reshape the ranges to (BATCH, SEQUENCE, 1)
-        x = x.reshape(batch_size,250,1)
-        # repeat dim 2 for the number of gaussian functions
-        x = x.repeat(1,1,self.num_gaussians)
-        
-        # outputs of the hyperbolic tan are in the range [-1, 1], so we modify that by 2 to allow the mask to increase the magnitude of the kinetics curve
-        # the center of the gaussian is scaled to [0,1] times information length
-        # the width of the gaussian is scaled to [0,1] times information length
-        a = (inputs[:,0:self.num_gaussians]*2).unsqueeze(1)
-        b = ((inputs[:,self.num_gaussians:2*self.num_gaussians]+1)/2).unsqueeze(1)*(max_lengths.reshape(batch_size,1,1).repeat(1,1,self.num_gaussians))
-        c = ((inputs[:,2*self.num_gaussians:3*self.num_gaussians]+1)/2).unsqueeze(1)*(max_lengths.reshape(batch_size,1,1).repeat(1,1,self.num_gaussians))
-        
-        out = a*torch.exp(-torch.square(x-b)/torch.square(c))
-        # out shape: (batch, sequence, i_gaussian) -> dim 2 must be removed by summing
-        return out.sum(dim=2)
-
-# returns "information length", i.e., the number of data points in the time series that are not zero-padded
-class InformationLengthMeasurer(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self,tensors):
-        batch_size = tensors.shape[0]
-        time_series = tensors[:,0,:]
-        rightmost = torch.zeros(batch_size, dtype=torch.uint8)
-        for b in range(batch_size):
-            nonzeros = torch.abs(time_series[b,:]) > 1e-9
-            idx_info = torch.nonzero(nonzeros)
-            rightmost[b] = idx_info[-1]
-        return rightmost
-
-# Similar to DemographicScaler in the sense that is uses demographic info to apply a mask over the predicted kinetics; however, the mask is constructed from summed gaussian functions whose parameters are computed from demographic information
-# training is quite unstable though, so this should be considered experimental only
-class DemographicGaussian(nn.Module):
-    def __init__(self, time_series_model, num_input_vectors, num_output_vectors, sequence_length, name=None):
-        super().__init__()        
-        
-        if name:
-            self.model_name = name
-        else:
-            self.model_name = f'DemographicGaussian_{time_series_model.model_name}'
-        self.num_output_vectors = num_output_vectors
-        self.sequence_length = sequence_length
-        
-        # number of gaussian functions to sum and include in the mask; the more gaussians, the more likely the training is unable to converge
-        self.num_gaussians = 2
-        
-        # we include a hyperbolic tan activation to ensure the output is constrained in [-1,1]
-        self.relu = nn.ReLU()
-        self.tanh = nn.Tanh()
-        self.fc1 = nn.Linear(4,16)
-        self.fc2 = nn.Linear(16,64)
-        self.fc3 = nn.Linear(64,num_output_vectors*self.num_gaussians*3)
-
-        # a custom module that computes the values of the Gaussian function (points on a normal distribution)
-        self.gaussian = GaussianFunction(self.num_gaussians)
-        # gets the "information length" of a time series, i.e., the length of the time series without trailing padded zeros; used to scale the width and center of the Gaussians
-        self.infolength = InformationLengthMeasurer()
-
-        # this refers to the model that eats the time series of kinematics (e.g., lower limb joint angles) and vomits out the time series of kinetics (e.g., knee contact forces)
-        self.time_series_model = time_series_model
+    def find_information_length(self, data):
+        nonzeros = torch.abs(data) > 1e-15
+        idx_info = torch.sum(nonzeros, dim=2)
+        idx_max = torch.max(idx_info, dim=1)
+        return idx_max[0] # return the first index because that contains the max values, rather than their indices
+            
+    def interpolate_and_pad(self, inputs, sizes):
+        interpolated = torch.zeros((inputs.shape[0], self.num_output_vectors, self.sequence_length))
+        for b in range(inputs.shape[0]):
+            interpolated[b,:,0:sizes[b]] = F.interpolate(inputs[b,:,:].unsqueeze(0), sizes[b])
+        return interpolated
         
     def forward(self, inputs):
-        
         scalars, time_series = inputs
-        batch_size = scalars.shape[0]
         
+        # find information length, which tells how many data points with non-zero values each sample in the batch has
+        self.information_length = self.find_information_length(time_series)
         # predict the time series of kinetics from the time series of kinematics
         kinetics = self.time_series_model(time_series)
-        
-        # process scalar inputs into a "mask" that we can apply over the CNN-estimated curve
-        x = self.fc1(scalars)
-        x = self.relu(x)
-        x = self.fc2(x)
-        x = self.relu(x)
-        x = self.fc3(x)
-        x = self.tanh(x)
-        
-        #print(f'x: {x}')
-        
-        # initialize the gaussian mask as a bunch of zeros
-        gaussian_mask = torch.zeros(kinetics.size())
-        # get the information length of the input time series (assuming it still has trailing zeros from zero-padding)
-        information_length = self.infolength(time_series)
-        
-        for f in range(self.num_output_vectors):
-            gaussian_mask[:,:,f] += self.gaussian(x,information_length)
-            
-        # scale each value in the kinetics time series by the gaussian mask
-        x = kinetics * gaussian_mask
-        
-        return x
+        # process scalar inputs into a "mask" that we can apply over the estimated curve
+        x = self.scalar_mask(scalars)
+        # scale each value in the kinetics time series by the scaling mask (x)
+        prediction = kinetics * x
+        return prediction
