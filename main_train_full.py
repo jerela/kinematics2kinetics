@@ -4,7 +4,7 @@ import copy
 import torch
 
 from datasets import CustomTimeSeriesDataset
-from networks import KineticsLSTM, KineticsFFN, KineticsCNN, KineticsCNN2D, KineticsGRU, WeightedMSELoss, DemographicScaler
+from networks import KineticsCNN, DemographicScaler
 from options import file_dataset, rng_seed, batch_size, plot_losses, plot_sample, workers, path_output, lr_initial
 from helpers_train_test import train
 
