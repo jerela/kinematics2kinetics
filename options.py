@@ -30,13 +30,19 @@ plot_losses=False
 plot_sample=False
 
 # path to the test data containing input kinematics and output kinetics of the test set; markerless uses kinematics from the markerless method, while reference uses kinematics from motion capture marker-based IK through OpenSim
-path_test_data='C:/Users/lavik/OneDrive/Documents/Polvineuro/Extracted/markerless_test_data_padded.csv'
+# this is only used in main_test.py to evaluate the previously-trained network
+path_test_data='C:/Users/lavik/OneDrive/Documents/Polvineuro/Extracted/reference_test_data_padded.csv'
 
 # path to the trained model to use for making predictions in main_test.py
-#path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/PATELLOFEMORAL_checkpoint_Demographic_CNN_full_kernelsize_7_epoch1353_finished.pt'
-#path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/NEWMEDIAL_checkpoint_Demographic_CNN_full_kernelsize_7_epoch1420_finished.pt'
-path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/MEDIAL_checkpoint_Demographic_CNN_full_kernelsize_9_epoch478_finished.pt'
-#path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/LATERAL_checkpoint_Demographic_CNN_full_kernelsize_7_epoch1885_finished.pt'
+if kinetics_variable == 'medial':
+    path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/MEDIAL_checkpoint_Demographic_CNN_full_kernelsize_9_epoch550_finished.pt'
+elif kinetics_variable == 'lateral':
+    path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/LATERAL_checkpoint_Demographic_CNN_full_kernelsize_9_epoch820_finished.pt'
+elif kinetics_variable == 'patellofemoral':
+    path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/PATELLOFEMORAL_checkpoint_Demographic_CNN_full_kernelsize_9_epoch789_finished.pt'
+else:
+    raise ValueError('Kinetics variable should be medial, lateral, or patellofemoral, but none of those was identified in options.py')
+
 
 path_output_predicted_time_series='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Output/'
 
