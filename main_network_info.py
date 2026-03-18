@@ -1,0 +1,53 @@
+import statistics
+
+import torch
+
+from torchinfo import summary
+
+from datasets import CustomTimeSeriesDataset
+from networks import KineticsCNN, DemographicScaler
+
+from visualization import save_sample_figure
+from options import path_test_data, path_trained_model
+
+
+
+def main():
+        
+    dataset = CustomTimeSeriesDataset(path_test_data)
+    
+    n_inputs, n_targets = dataset.get_num_features()
+    sequence_length = dataset.get_sequence_length()
+    print(f'Sequence length: {sequence_length}')
+    
+    # put the kernel size of the saved model here
+    krnsz = 9
+    
+    # construct the model and load its previously optimized weights
+    ts_model = KineticsCNN(n_inputs,n_targets,kernel_size=krnsz)
+    model = DemographicScaler(time_series_model=ts_model, num_input_vectors=n_inputs, num_output_vectors=n_targets, sequence_length=sequence_length, name=f'Demographic_CNN_loaded')
+    checkpoint = torch.load(path_trained_model)
+    #print(checkpoint['model_state_dict'])
+    model.load_state_dict(checkpoint['model_state_dict_at_minimum_loss'])
+        
+    i_input_scalars, i_input_time_series, i_target = dataset[0]
+    
+    # add a dimension in the beginning to make the data readable by the networks, which assume a batched shape (batch size being the first dimension)
+    i_input_scalars = i_input_scalars.unsqueeze(0)
+    i_input_time_series = i_input_time_series.unsqueeze(0)
+    i_target = i_target.unsqueeze(0)
+    
+    # compute the predicted time series
+    i_output = model((i_input_scalars, i_input_time_series)).permute(0,2,1)
+
+    
+    print(f'checkpoint keys: {checkpoint.keys()}')
+    print(f'model: {model}')
+    print(f'model summary: {summary(model, input_data=[(i_input_scalars, i_input_time_series)], col_names=('input_size', 'output_size', 'num_params'), mode='eval')}')
+
+    
+
+if __name__ == "__main__":
+    main()
+
+
