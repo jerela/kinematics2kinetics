@@ -610,7 +610,7 @@ class DemographicScaler(nn.Module):
         x = self.fc3(x)
         x = self.relu(x)
         
-        # reshape the scalar mask to (BATCH, FEATURES, SEQUENCE), noting that SEQUENCE is not the original size of the input time series, but just 100 data points, which will be interpolated
+        # reshape the scalar mask to (BATCH, FEATURES, SEQUENCE), noting that SEQUENCE is not necessarily the original size of the input time series, but num_values_mask data points, which will be interpolated
         batch_size = scalars.shape[0]
         x = x.reshape((batch_size,self.num_output_vectors,self.num_values_mask))
         # mimic a low-pass filter by averaging in order to create the scaling mask
