@@ -2,12 +2,22 @@
 
 ## Using the models
 
-The models are exported as Numpy ...
+The saved models .pt files containing a dictionary with the following keys:
+- 'epoch': the number of the epoch or iteration where the training stopped
+- 'model_state_dict': the PyTorch *[state_dict]*(https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html#what-is-a-state-dict) of the trained model at the epoch where the training stopped
+- 'optimizer_state_dict': the *[state_dict]*(https://docs.pytorch.org/docs/stable/generated/torch.optim.Optimizer.state_dict.html) of the optimizer at the epoch where the training stopped
+- 'training_loss': a Python *list* of training losses at each epoch
+- 'validation_loss': a Python *list* of validation losses at each epoch
+- 'minimum_loss': the smallest achieved validation loss during training
+- 'epoch_at_minimum_loss': the epoch where the smallest validation loss was achieved
+- 'model_state_dict_at_minimum_loss': the *state_dict* of the trained model at the epoch where the smallest validation loss was achieved
+
+The 'model_state_dict_at_minimum_loss' is probably what you want to use, because it contains the state of the model that resulted in the smallest validation loss. Its use is demonstrated in [main_test.py](/scripts/main_test.py).
 The exported model files do not include the preprocessing or postprocessing steps, so make sure to check them out from the **code** if you wish to replicate them.
 
 ## License
 
-The models are licensed under CC BY 4.0, described below.
+The models in this folder are licensed under the CC BY 4.0 license, described below.
 
 ```
 Attribution 4.0 International
