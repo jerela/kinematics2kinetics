@@ -44,7 +44,13 @@ def main():
     print(f'checkpoint keys: {checkpoint.keys()}')
     print(f'model: {model}')
     print(f'model summary: {summary(model, input_data=[(i_input_scalars, i_input_time_series)], col_names=('input_size', 'output_size', 'num_params'), mode='eval')}')
-
+    
+    # get the weights of the first linear layer in the demographics using module; this layer will take 4 preprocessed demographics scalars and turns them into 16 features
+    demographic_fc1_weights = [x for x in model.fc1.parameters()][0]
+    # print the weights, showing a 16-by-4 tensor
+    print(f'demographic fc1 weights: {demographic_fc1_weights}')
+    # take the mean of the absolute values of the weights to get an idea of how much each input scalar is weighted; note that this interpretation assumes that the scalars are similarly normalized during preprocessing
+    print(torch.mean(torch.abs(demographic_fc1_weights), dim=0))
     
 
 if __name__ == "__main__":
