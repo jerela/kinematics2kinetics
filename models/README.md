@@ -2,10 +2,10 @@
 
 ## Using the models
 
-The saved models .pt files containing a dictionary with the following keys:
+The saved models are .pt files containing a dictionary with the following keys:
 - 'epoch': the number of the epoch or iteration where the training stopped
-- 'model_state_dict': the PyTorch *[state_dict]*(https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html#what-is-a-state-dict) of the trained model at the epoch where the training stopped
-- 'optimizer_state_dict': the *[state_dict]*(https://docs.pytorch.org/docs/stable/generated/torch.optim.Optimizer.state_dict.html) of the optimizer at the epoch where the training stopped
+- 'model_state_dict': the PyTorch [*state_dict*](https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html#what-is-a-state-dict) of the trained model at the epoch where the training stopped
+- 'optimizer_state_dict': the [*state_dict*](https://docs.pytorch.org/docs/stable/generated/torch.optim.Optimizer.state_dict.html) of the optimizer at the epoch where the training stopped
 - 'training_loss': a Python *list* of training losses at each epoch
 - 'validation_loss': a Python *list* of validation losses at each epoch
 - 'minimum_loss': the smallest achieved validation loss during training
@@ -14,6 +14,10 @@ The saved models .pt files containing a dictionary with the following keys:
 
 The 'model_state_dict_at_minimum_loss' is probably what you want to use, because it contains the state of the model that resulted in the smallest validation loss. Its use is demonstrated in [main_test.py](/scripts/main_test.py).
 The exported model files do not include the preprocessing or postprocessing steps, so make sure to check them out from the **code** if you wish to replicate them.
+
+## Model variations
+
+Models predict either medial, lateral, or patellofemoral knee contact force time series, as indicated in upper-case letters in the model's name. Additionally, models come in "full" or "lowerbody" variants, which refers to the input kinematics that the model uses. "Full" uses lower-body, pelvis, and lumbar joint angles as described in the [publication](WIP). "Lower-body" uses only lower-body joint angles, i.e., hip, knee, and ankle joint angles from both legs.
 
 ## License
 
