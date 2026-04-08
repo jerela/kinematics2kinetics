@@ -93,42 +93,44 @@ class KineticsCNN(nn.Module):
         
         self.model_name = name
         
+        multiplier = 8
+        
         self.c1 = nn.Conv1d(
             in_channels=num_input_vectors,
-            out_channels=num_output_vectors*8,
+            out_channels=num_output_vectors*multiplier,
             kernel_size=kernel_size,
             stride=1,
             padding='same',
             dilation=1,
             padding_mode='zeros'
         )
-        self.bn1 = nn.BatchNorm1d(num_features=num_output_vectors*8)
+        self.bn1 = nn.BatchNorm1d(num_features=num_output_vectors*multiplier)
         self.relu = nn.ReLU()
         
         self.c2 = nn.Conv1d(
-            in_channels=num_output_vectors*8,
-            out_channels=num_output_vectors*16,
+            in_channels=num_output_vectors*multiplier,
+            out_channels=num_output_vectors*multiplier*2,
             kernel_size=kernel_size,
             stride=1,
             padding='same',
             dilation=1,
             padding_mode='zeros'
         )
-        self.bn2 = nn.BatchNorm1d(num_features=num_output_vectors*16)
+        self.bn2 = nn.BatchNorm1d(num_features=num_output_vectors*multiplier*2)
         
         self.c3 = nn.Conv1d(
-            in_channels=num_output_vectors*16,
-            out_channels=num_output_vectors*32,
+            in_channels=num_output_vectors*multiplier*2,
+            out_channels=num_output_vectors*multiplier*4,
             kernel_size=kernel_size,
             stride=1,
             padding='same',
             dilation=1,
             padding_mode='zeros'
         )
-        self.bn3 = nn.BatchNorm1d(num_features=num_output_vectors*32)
+        self.bn3 = nn.BatchNorm1d(num_features=num_output_vectors*multiplier*4)
         
         self.c4 = nn.Conv1d(
-            in_channels=num_output_vectors*32,
+            in_channels=num_output_vectors*multiplier*4,
             out_channels=num_output_vectors,
             kernel_size=kernel_size,
             stride=1,

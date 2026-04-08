@@ -2,23 +2,26 @@
 kinetics_variable = 'medial'
 
 # list of kinematics (generalized coordinate) variables to include in the input to the network
+# "full" set of kinematics
 included_generalized_coordinates = ['lumbar_extension', 'lumbar_rotation', 'lumbar_bending', 'pelvis_tilt', 'pelvis_list', 'pelvis_rotation', 'hip_flexion_primary', 'hip_adduction_primary', 'hip_rotation_primary', 'knee_angle_primary', 'ankle_angle_primary', 'hip_flexion_secondary', 'hip_adduction_secondary', 'hip_rotation_secondary', 'knee_angle_secondary', 'ankle_angle_secondary']
 #included_generalized_coordinates = ['pelvis_tilt', 'pelvis_list', 'pelvis_rotation', 'hip_flexion_primary', 'hip_adduction_primary', 'hip_rotation_primary', 'knee_angle_primary', 'ankle_angle_primary', 'hip_flexion_secondary', 'hip_adduction_secondary', 'hip_rotation_secondary', 'knee_angle_secondary', 'ankle_angle_secondary']
+# "lowerbody" set
 #included_generalized_coordinates = ['hip_flexion_primary', 'hip_adduction_primary', 'hip_rotation_primary', 'knee_angle_primary', 'ankle_angle_primary', 'hip_flexion_secondary', 'hip_adduction_secondary', 'hip_rotation_secondary', 'knee_angle_secondary', 'ankle_angle_secondary']
 #included_generalized_coordinates = ['hip_flexion_primary', 'knee_angle_primary', 'ankle_angle_primary', 'hip_flexion_secondary', 'knee_angle_secondary', 'ankle_angle_secondary']
 #included_generalized_coordinates = ['hip_flexion_primary', 'knee_angle_primary', 'ankle_angle_primary']
 #included_generalized_coordinates = ['hip_rotation_secondary']
 
 # main/training settings
-rng_seed=1
+#rng_seed=1
+rng_seed=5
 file_dataset='C:/Users/lavik/OneDrive/Documents/Polvineuro/Extracted/extracted_data_healthy_padded.csv'
 path_output = 'C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output'
 
 # training settings
 batch_size=200
 early_stopping_threshold=100
-# 10 000 to be sure
-max_epochs=10000#500#200
+# 10 000 to be sure, although early stopping will halt training much earlier
+max_epochs=10000
 
 workers=0
 
@@ -35,11 +38,11 @@ path_test_data='C:/Users/lavik/OneDrive/Documents/Polvineuro/Extracted/reference
 
 # path to the trained model to use for making predictions in main_test.py
 if kinetics_variable == 'medial':
-    path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/MEDIAL_checkpoint_Demographic_CNN_full_kernelsize_9_epoch550_finished.pt'
+    path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/MEDIAL_full_checkpoint_Demographic_CNN_full_kernelsize_9_epoch750_finished.pt'
 elif kinetics_variable == 'lateral':
-    path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/LATERAL_checkpoint_Demographic_CNN_full_kernelsize_9_epoch820_finished.pt'
+    path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/LATERAL_full_checkpoint_Demographic_CNN_full_kernelsize_9_epoch450_finished.pt'
 elif kinetics_variable == 'patellofemoral':
-    path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/PATELLOFEMORAL_checkpoint_Demographic_CNN_full_kernelsize_9_epoch789_finished.pt'
+    path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Preliminary_testing/Saves/PATELLOFEMORAL_full_checkpoint_Demographic_CNN_full_kernelsize_9_epoch524_finished.pt'
 else:
     raise ValueError('Kinetics variable should be medial, lateral, or patellofemoral, but none of those was identified in options.py')
 

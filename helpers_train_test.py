@@ -198,7 +198,7 @@ def run_kfold_gru():
 
 def run_kfold_cnn():
     hyperparams = ['kernel_size', [9]]
-    #hyperparams = ['kernel_size', [5,7,9,11]]
+    #hyperparams = ['kernel_size', [9,11,13]]
     run_kfold_validation(model_kinetics=KineticsCNN, model_name='CNN', hyperparameters=hyperparams)
 
 def run_kfold_cnn2d():
@@ -206,8 +206,8 @@ def run_kfold_cnn2d():
     run_kfold_validation(model_kinetics=KineticsCNN2D, model_name='CNN', hyperparameters=hyperparams)
 
 def run_kfold_lstm():
-    #hyperparams = ['hidden_size', (20,50,100,150)]
-    hyperparams = ['hidden_size', [50]]
+    hyperparams = ['hidden_size', (2,20,50)]
+    #hyperparams = ['hidden_size', [50]]
     run_kfold_validation(model_kinetics=KineticsLSTM, model_name='LSTM', hyperparameters=hyperparams)
 
 def run_kfold_cnnlstm():
