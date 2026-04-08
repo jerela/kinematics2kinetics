@@ -28,13 +28,17 @@ The repository accompanies and is better understood by reading our [publication]
 
 Below are instructions for using the **code**, **data**, or **models** in this repository. Make sure to read also check their [licenses](#license-and-copyright) and [citation instructions](#publication-and-citation) further below.
 
+### Using the code
+See under [scripts](scripts/).
+
 ### Using the data
 
+See under [data](data/).
 
 ### Using the models
 
-The models are exported as Numpy ...
-The exported model files do not include the preprocessing or postprocessing steps, so make sure to check them out from the **code** if you wish to replicate them.
+See under [models](models/).
+
 
 
 

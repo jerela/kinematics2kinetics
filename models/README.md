@@ -1,3 +1,15 @@
+# Trained knee contact force prediction models
+
+## Using the models
+
+The models are exported as Numpy ...
+The exported model files do not include the preprocessing or postprocessing steps, so make sure to check them out from the **code** if you wish to replicate them.
+
+## License
+
+The models are licensed under CC BY 4.0, described below.
+
+```
 Attribution 4.0 International
 
 =======================================================================
@@ -393,3 +405,4 @@ the avoidance of doubt, this paragraph does not form part of the public
 licenses.
 
 Creative Commons may be contacted at creativecommons.org.
+```

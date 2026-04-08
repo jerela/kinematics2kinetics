@@ -1,4 +1,6 @@
-# Using the code
+# Python code for training and evaluating knee contact force prediction models
+
+## Using the code
 
 The code contains scripts that are meant to be run as entry points (file names starting with "main") and additional scripts that shouldn't be executed directly.
 
@@ -24,3 +26,29 @@ The additional scripts are as follows:
   * Contains options used by other scripts, such as input/output scaling boundaries, file paths, and training parameters.
 - visualization.py
   * Contains helper functions and classes specifically for visualizing data
+
+## License
+
+```
+MIT License
+
+Copyright (c) 2026 University of Eastern Finland
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
