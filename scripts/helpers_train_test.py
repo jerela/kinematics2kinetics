@@ -106,9 +106,9 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
             
             loss.backward()
             
-            training_loss += loss
+            training_loss += loss.detach()*float(len(i_target))
             
-        
+        training_loss = training_loss/float(len(training_set))
         # next, we do validation and set the model to evaluation mode for that
         if validation_set:
             model.eval()
@@ -118,13 +118,14 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
                     i_output = model((i_input_scalars, i_input_time_series)).permute(0,2,1)
                 
                     loss = loss_fn(i_output,i_target)
-                    validation_loss += loss
+                    validation_loss += loss.detach()*float(len(i_target))
+            validation_loss = validation_loss/float(len(validation_set))
         else:
             validation_loss = training_loss
         
         print(f'Epoch: {str(epoch+1)}, training loss: {training_loss:.5f}, validation loss: {validation_loss:.5f}, learning rate: {scheduler.get_last_lr()}')
-        losses_training.append(training_loss.detach())
-        losses_validation.append(validation_loss.detach())
+        losses_training.append(training_loss)
+        losses_validation.append(validation_loss)
         
         if plot_losses:
             plottable_titles = ('training loss', 'validation loss')
