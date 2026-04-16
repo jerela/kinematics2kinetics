@@ -10,7 +10,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from datasets import CustomTimeSeriesDataset
 from networks import KineticsLSTM, KineticsFFN, KineticsCNN, KineticsCNN2D, KineticsGRU, KineticsCNNLSTM, KineticsMLSTMFCN, KineticsTransformer, WeightedMSELoss, DemographicScaler
 from visualization import Plotter, save_loss_figure, save_sample_figure
-from options import batch_size, early_stopping_threshold, max_epochs, file_dataset, lr_initial, plot_losses, plot_sample, workers, path_output
+from options import batch_size, early_stopping_threshold, max_epochs, file_dataset, lr_initial, plot_losses, plot_sample, workers, path_output, accumulate_gradients
 
 
 
@@ -104,7 +104,13 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
             
             loss = loss_fn(i_output,i_target)
             
-            loss.backward()
+            if accumulate_gradients:
+                loss.backward()
+            else:
+                # update weights after every batch is processed
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                optimizer.step()
             
             training_loss += loss.detach()*float(len(i_target))
             
@@ -154,8 +160,9 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
         
         # set the model back to training mode, update the weights, reset the gradient and check if learning rate needs to be reduced
         model.train(True)
-        optimizer.step()
-        optimizer.zero_grad(set_to_none=True)
+        if accumulate_gradients:
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
         scheduler.step(training_loss)
         
         
