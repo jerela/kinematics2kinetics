@@ -18,14 +18,14 @@ file_dataset='C:/Users/lavik/OneDrive/Documents/Polvineuro/Extracted/extracted_d
 path_output = 'C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output'
 
 # training settings
-batch_size=200
+batch_size=256
 early_stopping_threshold=100
 # 10 000 to be sure, although early stopping will halt training much earlier
 max_epochs=10000
 
 workers=0
 
-accumulate_gradients = False
+accumulate_gradients = True
 
 # learning rate settings
 lr_initial=1e-2
