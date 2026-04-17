@@ -254,7 +254,7 @@ class KineticsCNN2D(nn.Module):
 
 # gated recurrent unit network
 class KineticsGRU(nn.Module):
-    def __init__(self, num_input_vectors, num_output_vectors, num_layers, name='KineticsGRU'):
+    def __init__(self, num_input_vectors, num_output_vectors, num_layers, bidirectional=True, name='KineticsGRU'):
         super().__init__()
         
         self.model_name = name
@@ -264,7 +264,7 @@ class KineticsGRU(nn.Module):
             hidden_size=num_output_vectors,
             batch_first=True,
             num_layers=num_layers,#4,
-            bidirectional=lstm_bidirectional
+            bidirectional=bidirectional
         )
         
         # see explanation in forward()
