@@ -8,13 +8,70 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from datasets import CustomTimeSeriesDataset
-from networks import KineticsLSTM, KineticsFFN, KineticsCNN, KineticsCNN2D, KineticsGRU, KineticsCNNLSTM, KineticsMLSTMFCN, KineticsTransformer, WeightedMSELoss, DemographicScaler
+from networks import KineticsLSTM, KineticsFFN, KineticsCNN, KineticsCNN2D, KineticsGRU, KineticsCNNLSTM, KineticsMLSTMFCN, KineticsTransformer, DemographicScaler
 from visualization import Plotter, save_loss_figure, save_sample_figure
-from options import batch_size, early_stopping_threshold, max_epochs, file_dataset, lr_initial, plot_losses, plot_sample, workers, path_output, accumulate_gradients
+from options import rng_seed, batch_size, early_stopping_threshold, max_epochs, file_dataset, lr_initial, plot_losses, plot_sample, workers, path_output, accumulate_gradients, kinetics_variable, kinetics_bounds
 
 
+# mean square error function that puts less emphasis on values at the beginning and the end of the time series, to account for the high simulation nose in the beginning and end of contact force time series
+class WeightedMSELoss(torch.nn.Module):
+    """
+    A custom loss function that computes the mean square error between the input and the target. Customized to disregard zeros in the target data using a weights mask.
+    Note that the mean is calculated for all elements regardless of shape. Therefore, even if there are several kinetics features or several data samples in the batch, one scalar is returned for loss.
+    Note also that the number of trailing zeros (result of zero-padding) will make this error smaller than the "real" error is.
+    This loss should be used during training to compare different hyperparameter configurations, when the absolute value of the loss (and its physical interpretation) is irrelevant and only the relative losses matter.
+    """
+    def __init__(self):
+        super().__init__()
+        
+        # define the kernel size of the convolution filter
+        self.window_size = 9
+    
+    # because the data may be padded, we use convolution to make sure the weights of the loss mitigate the effects of padding while also applying some mitigation at both ends of the padless time series
+    def __update_weights_mask(self, targets):
+        
+        # create a mask that is 1 for non-zero values in the target time series, and 0 otherwise
+        #nonzeros = (targets != 0).float()
+        nonzeros = (torch.abs(targets) > 1e-12).float()
+        
+        # get the number of target channels or features
+        target_shape = targets.shape        
+        n_channels = target_shape[1]
+        
+        # construct the filters so their elements sum to 1 (normalized to 1)
+        filters = torch.ones((n_channels, n_channels, self.window_size))/self.window_size
+        padding_size = int((self.window_size-1)/2)
+        
+        # calculate the final weights mask
+        self.weights_mask = torch.nn.functional.conv1d(nonzeros, weight=filters, padding=padding_size)
+        
+        #print(f'Weights: {self.weights_mask}')
+        #fig = plt.figure()
+        #fig.add_subplot(121)
+        #plt.plot(self.weights_mask[0,:,:].squeeze(0),'x')
+        #fig.add_subplot(122)
+        #plt.plot(targets[0,:,:].squeeze(0))
+        #plt.show()
+        
+    def forward(self, inputs, targets):
+        self.__update_weights_mask(targets)
+        return torch.sum( ((inputs-targets)**2) * self.weights_mask )/torch.sum(self.weights_mask)
+        #return torch.mean( ((inputs-targets)**2) * self.weights_mask )
+
+# experimental loss, should only consider non-zero values in the mean; for some reason, is a bit slower than WeightedMSELoss, while the output difference is negligible
+def nonzero_MSE_loss(inputs, targets):
+    idx_valid = torch.abs(targets) > 1e-12
+    #print(f'shape of valid indices: {idx_valid.shape}')
+    #print(f'valid indices: {idx_valid}')
+    return torch.mean((inputs[idx_valid]-targets[idx_valid])**2)
+    
 
 
+# a function to return the output to its physically meaningful scale by undoing normalization
+def denormalize(x,bounds):
+    b_min = bounds[0]
+    b_max = bounds[1]
+    return b_min + x*(b_max-b_min)
 
 
 def get_time_series(model, dataset, loss_fn, n_samples=1, start_index=0):
@@ -54,6 +111,7 @@ def save_checkpoint(checkpoint, name):
 def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, early_stopping = 25, plot_losses=False, plot_sample=False):
     
     loss_fn = WeightedMSELoss()
+    #loss_fn = nonzero_MSE_loss
     
     # construct DataLoader
     data_loader_training = DataLoader(training_set, shuffle=True, batch_size=batch_size, num_workers=workers)
@@ -103,6 +161,7 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
             i_output = model((i_input_scalars, i_input_time_series)).permute(0,2,1)
             
             loss = loss_fn(i_output,i_target)
+            training_loss += loss.detach()*float(len(i_target))
             
             if accumulate_gradients:
                 loss.backward()
@@ -112,8 +171,7 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
                 loss.backward()
                 optimizer.step()
             
-            training_loss += loss.detach()*float(len(i_target))
-            
+        #training_loss = denormalize(training_loss/float(len(training_set)), kinetics_bounds[f'kcf_{kinetics_variable}'])
         training_loss = training_loss/float(len(training_set))
         # next, we do validation and set the model to evaluation mode for that
         if validation_set:
@@ -125,6 +183,7 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
                 
                     loss = loss_fn(i_output,i_target)
                     validation_loss += loss.detach()*float(len(i_target))
+            #validation_loss = denormalize(validation_loss/float(len(validation_set)), kinetics_bounds[f'kcf_{kinetics_variable}'])
             validation_loss = validation_loss/float(len(validation_set))
         else:
             validation_loss = training_loss
@@ -205,8 +264,8 @@ def run_kfold_gru():
     run_kfold_validation(model_kinetics=KineticsGRU, model_name='GRU', hyperparameters=hyperparams)
 
 def run_kfold_cnn():
-    hyperparams = ['kernel_size', [9]]
-    #hyperparams = ['kernel_size', [9,11,13]]
+    #hyperparams = ['kernel_size', [9]]
+    hyperparams = ['kernel_size', [3,5,7,9,11]]
     run_kfold_validation(model_kinetics=KineticsCNN, model_name='CNN', hyperparameters=hyperparams)
 
 def run_kfold_cnn2d():
@@ -258,6 +317,8 @@ def run_kfold_validation(model_kinetics, hyperparameters, kinetics_arguments={},
         losses = []
         # loop through each fold
         for i in range(k):
+            # reset RNG using a manual seed
+            torch.manual_seed(rng_seed)
             
             kinetics_model_name = f'{model_name}_{hyperparameter_name}_{hyperparameter_values[j]}_fold{i+1}'
             # first, we instantiate a model for predicting the time series from input time series

@@ -25,7 +25,7 @@ max_epochs=10000
 
 workers=0
 
-accumulate_gradients = True
+accumulate_gradients = False
 
 # learning rate settings
 lr_initial=1e-2

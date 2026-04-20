@@ -9,48 +9,6 @@ METHODS/ARCHITECTURES TO EXPLORE:
 - MLSTM-FCN PyTorch implementation: https://github.com/alexmelekhin/MLSTM-FCN-Pytorch/blob/main/src/model.py
 
 """
-# mean square error function that puts less emphasis on values at the beginning and the end of the time series, to account for the high simulation nose in the beginning and end of contact force time series
-class WeightedMSELoss(nn.Module):
-    """
-    A custom loss function that computes the mean square error between the input and the target. Customized to disregard zeros in the target data using a weights mask.
-    Note that the mean is calculated for all elements regardless of shape. Therefore, even if there are several kinetics features or several data samples in the batch, one scalar is returned for loss.
-    Note also that the number of trailing zeros (result of zero-padding) will make this error smaller than the "real" error is.
-    This loss should be used during training to compare different hyperparameter configurations, when the absolute value of the loss (and its physical interpretation) is irrelevant and only the relative losses matter.
-    """
-    def __init__(self):
-        super().__init__()
-        
-        # define the kernel size of the convolution filter
-        self.window_size = 9
-    
-    # because the data may be padded, we use convolution to make sure the weights of the loss mitigate the effects of padding while also applying some mitigation at both ends of the padless time series
-    def __update_weights_mask(self, targets):
-        
-        # create a mask that is 1 for non-zero values in the target time series, and 0 otherwise
-        nonzeros = (targets != 0).float()
-        
-        # get the number of target channels or features
-        target_shape = targets.shape        
-        n_channels = target_shape[1]
-        
-        # construct the filters so their elements sum to 1 (normalized to 1)
-        filters = torch.ones((n_channels, n_channels, self.window_size))/self.window_size
-        padding_size = int((self.window_size-1)/2)
-        
-        # calculate the final weights mask
-        self.weights_mask = F.conv1d(nonzeros, weight=filters, padding=padding_size)
-        
-        #print(f'Weights: {self.weights_mask}')
-        #fig = plt.figure()
-        #fig.add_subplot(121)
-        #plt.plot(self.weights_mask[0,:,:].squeeze(0),'x')
-        #fig.add_subplot(122)
-        #plt.plot(targets[0,:,:].squeeze(0))
-        #plt.show()
-        
-    def forward(self, inputs, targets):
-        self.__update_weights_mask(targets)
-        return torch.mean( ((inputs-targets)**2) * self.weights_mask )
 
 
 # various network architectures that map input kinematic time series to output kinetic time series

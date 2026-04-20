@@ -6,7 +6,7 @@ import torch
 from datasets import CustomTimeSeriesDataset
 from networks import KineticsCNN, DemographicScaler
 from options import file_dataset, rng_seed, batch_size, plot_losses, plot_sample, workers, path_output, lr_initial
-from helpers_train_test import train
+from helpers_train_test import train, kinetics_variable, kinetics_bounds, denormalize
 
 torch.manual_seed(rng_seed)
 
@@ -16,8 +16,8 @@ def run_training():
     
     dataset = CustomTimeSeriesDataset(file_dataset)
     
-    # split the original training set to 90% and 10% fractions; the 90% will be used as training data, while validation loss will be evaluated on the held-out 10% to determine when to stop training
-    idx_training, idx_validation = dataset.get_split_indices(fractions=(90,10))
+    # split the original training set to 80% and 20% fractions; the 80% will be used as training data, while validation loss will be evaluated on the held-out 20% to determine when to stop training
+    idx_training, idx_validation = dataset.get_split_indices(fractions=(80,20))
     training_set = dataset.subset(idx_training)
     validation_set = dataset.subset(idx_validation)
     
@@ -38,8 +38,8 @@ def run_training():
     validation_loss = training_output['validation_loss'][-1]
     
     print(f'Final training loss after training the full model: {training_loss}, validation loss: {validation_loss}')
-    print(f'Best validation loss of {training_output['minimum_loss']} at epoch {training_output['epoch_at_minimum_loss']}')
-
+    print(f'Best validation loss of {denormalize(training_output['minimum_loss'], kinetics_bounds[f'kcf_{kinetics_variable}'])} at epoch {training_output['epoch_at_minimum_loss']}')
+#denormalize(training_loss/float(len(training_set)), kinetics_bounds[f'kcf_{kinetics_variable}'])
 
 def main():
     run_training()
