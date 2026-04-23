@@ -15,18 +15,21 @@ METHODS/ARCHITECTURES TO EXPLORE:
 
 # standard feedforward neural network, doesn't perform well
 class KineticsFFN(nn.Module):
-    def __init__(self, num_input_vectors, num_output_vectors, len_sequence, name='KineticsFFN'):
+    def __init__(self, num_input_vectors, num_output_vectors, sequence_length=250, hidden_size=1024, name='KineticsFFN'):
         super().__init__()
         
         self.model_name = name
         
-        self.sequence_length = len_sequence
+        self.sequence_length = sequence_length
         
         self.num_output_vectors = num_output_vectors
         
-        self.fc1 = nn.Linear(num_input_vectors*self.sequence_length, num_output_vectors*self.sequence_length)
-        self.fc2 = nn.Linear(1024, num_output_vectors*self.sequence_length)
+        self.fc1 = nn.Linear(num_input_vectors*self.sequence_length, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, hidden_size)
+        self.fc4 = nn.Linear(hidden_size, num_output_vectors*self.sequence_length)
         self.flattener = nn.Flatten()
+        self.relu = nn.ReLU()
         
     def forward(self,inputs):
         
@@ -35,9 +38,13 @@ class KineticsFFN(nn.Module):
         
         x = self.flattener(time_series)
         x = self.fc1(x)
-        x = F.sigmoid(x)
+        x = self.relu(x)
         x = self.fc2(x)
-        x = F.relu(x)
+        x = self.relu(x)
+        x = self.fc3(x)
+        x = self.relu(x)
+        x = self.fc4(x)
+        x = self.relu(x)
         
         prediction = x.reshape(batch_size,self.sequence_length,self.num_output_vectors)
                 
@@ -293,30 +300,32 @@ class KineticsCNNLSTM(nn.Module):
         
         self.lstm_bidirectional = lstm_bidirectional
         
+        multiplier = 8
+        
         self.c1 = nn.Conv1d(
             in_channels=num_input_vectors,
-            out_channels=num_output_vectors*4,
+            out_channels=num_output_vectors*multiplier,
             kernel_size=kernel_size,
             stride=1,
             padding='same',
             dilation=1,
             padding_mode='zeros'
         )
-        self.bn1 = nn.BatchNorm1d(num_features=num_output_vectors*4)
+        self.bn1 = nn.BatchNorm1d(num_features=num_output_vectors*multiplier)
         
         self.c2 = nn.Conv1d(
-            in_channels=num_output_vectors*4,
-            out_channels=num_output_vectors*8,
+            in_channels=num_output_vectors*multiplier,
+            out_channels=num_output_vectors*multiplier*2,
             kernel_size=kernel_size,
             stride=1,
             padding='same',
             dilation=1,
             padding_mode='zeros'
         )
-        self.bn2 = nn.BatchNorm1d(num_features=num_output_vectors*8)
+        self.bn2 = nn.BatchNorm1d(num_features=num_output_vectors*multiplier*2)
         
         self.c3 = nn.Conv1d(
-            in_channels=num_output_vectors*8,
+            in_channels=num_output_vectors*multiplier*2,
             out_channels=num_output_vectors,
             kernel_size=kernel_size,
             stride=1,
@@ -374,9 +383,10 @@ class KineticsMLSTMFCN(nn.Module):
         
         self.model_name = name
         
-        num_filters_c1 = num_input_vectors*8
-        num_filters_c2 = num_input_vectors*16
-        num_filters_c3 = num_input_vectors*8
+        multiplier = 8
+        num_filters_c1 = num_output_vectors*multiplier*2
+        num_filters_c2 = num_output_vectors*multiplier*4
+        num_filters_c3 = num_output_vectors*multiplier*2
         
         self.lstm = KineticsLSTM(num_input_vectors=num_input_vectors, num_output_vectors=num_output_vectors, hidden_size=hidden_size, num_layers=lstm_num_layers, bidirectional=lstm_bidirectional)
         

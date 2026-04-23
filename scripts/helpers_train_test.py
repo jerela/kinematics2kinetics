@@ -237,12 +237,6 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
                 'model_state_dict_at_minimum_loss': model_state_dict_at_best_loss
             }
             save_checkpoint(checkpoint, f'{model.model_name}_epoch{epoch+1}')
-        
-    
-    # log model and optimizer states and figures
-    save_checkpoint(checkpoint, f'{model.model_name}_epoch{epoch+1}_finished')
-    save_loss_figure((losses_training,losses_validation), f'{model.model_name}_epoch{epoch+1}')
-    save_sample_figure(get_time_series(model=model, dataset=sample_set, loss_fn=loss_fn, n_samples=torch.min(torch.tensor([len(sample_set), 9]))), name=f'{model.model_name}_epoch{epoch+1}')
     
     training_output = {
         'epoch': epoch,
@@ -255,17 +249,26 @@ def train(model, training_set, validation_set=None, n_epochs = 100, lr = 0.01, e
         'model_state_dict_at_minimum_loss': model_state_dict_at_best_loss
     }
     
+    # log model and optimizer states and figures
+    save_checkpoint(checkpoint, f'{model.model_name}_epoch{epoch+1}_finished')
+    save_loss_figure((losses_training,losses_validation), f'{model.model_name}_epoch{epoch+1}')
+    save_sample_figure(get_time_series(model=model, dataset=sample_set, loss_fn=loss_fn, n_samples=torch.min(torch.tensor([len(sample_set), 9]))), name=f'{model.model_name}_epoch{epoch+1}')
+    
     return training_output
 
 
+def run_kfold_ffn():
+    hyperparams = ['hidden_size', (32, 64, 128, 256, 512)]
+    args_kinetics = {'sequence_length': 250}
+    run_kfold_validation(model_kinetics=KineticsFFN, model_name='FFN', hyperparameters=hyperparams, kinetics_arguments=args_kinetics)
 
 def run_kfold_gru():
     hyperparams = ['num_layers', (1,2,4,8)]
     run_kfold_validation(model_kinetics=KineticsGRU, model_name='GRU', hyperparameters=hyperparams)
 
 def run_kfold_cnn():
-    #hyperparams = ['kernel_size', [9]]
-    hyperparams = ['kernel_size', [3,5,7,9,11]]
+    hyperparams = ['kernel_size', [5]]
+    #hyperparams = ['kernel_size', [3,5,7,9,11]]
     run_kfold_validation(model_kinetics=KineticsCNN, model_name='CNN', hyperparameters=hyperparams)
 
 def run_kfold_cnn2d():
@@ -273,17 +276,21 @@ def run_kfold_cnn2d():
     run_kfold_validation(model_kinetics=KineticsCNN2D, model_name='CNN', hyperparameters=hyperparams)
 
 def run_kfold_lstm():
-    hyperparams = ['hidden_size', (2,20,50)]
+    #hyperparams = ['hidden_size', (2,4,8)]
+    hyperparams = ['hidden_size', (16,32)]
     #hyperparams = ['hidden_size', [50]]
     run_kfold_validation(model_kinetics=KineticsLSTM, model_name='LSTM', hyperparameters=hyperparams)
 
 def run_kfold_cnnlstm():
-    hyperparams = ['hidden_size', [20]]
-    args_kinetics = {'kernel_size': 7}
+    #hyperparams = ['hidden_size', [20]]
+    #args_kinetics = {'kernel_size': 7}
+    #hyperparams = ['kernel_size', (3, 5, 9)]
+    hyperparams = ['kernel_size', [7]]
+    args_kinetics = {'hidden_size': 8}
     run_kfold_validation(model_kinetics=KineticsCNNLSTM, model_name='CNN-LSTM', hyperparameters=hyperparams, kinetics_arguments=args_kinetics)
 
 def run_kfold_mlstmfcn():
-    hyperparams = ['hidden_size', [50]]
+    hyperparams = ['hidden_size', (2, 4, 8, 16, 32)]
     run_kfold_validation(model_kinetics=KineticsMLSTMFCN, model_name='MLSTM-CNN', hyperparameters=hyperparams)
 
 def run_kfold_xformer():
