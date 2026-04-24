@@ -3,17 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-"""
-METHODS/ARCHITECTURES TO EXPLORE:
-- LSTM-FCN PyTorch implementation: https://github.com/flaviagiammarino/lstm-fcn-pytorch/blob/main/lstm_fcn_pytorch/modules.py
-- MLSTM-FCN PyTorch implementation: https://github.com/alexmelekhin/MLSTM-FCN-Pytorch/blob/main/src/model.py
+# various network architectures that map input kinematic time series (and demographics scalars) to output kinetic time series
 
-"""
-
-
-# various network architectures that map input kinematic time series to output kinetic time series
-
-# standard feedforward neural network, doesn't perform well
+# standard fully connected feedforward neural network, doesn't perform well
 class KineticsFFN(nn.Module):
     def __init__(self, num_input_vectors, num_output_vectors, sequence_length=250, hidden_size=1024, name='KineticsFFN'):
         super().__init__()
@@ -50,8 +42,7 @@ class KineticsFFN(nn.Module):
                 
         return prediction
 
-
-# convolutional neural network
+# convolutional neural network, performs best
 class KineticsCNN(nn.Module):
     def __init__(self, num_input_vectors, num_output_vectors, kernel_size=1, name='KineticsCNN'):
         super().__init__()
@@ -228,26 +219,20 @@ class KineticsGRU(nn.Module):
             input_size=num_input_vectors,
             hidden_size=num_output_vectors,
             batch_first=True,
-            num_layers=num_layers,#4,
+            num_layers=num_layers,
             bidirectional=bidirectional
         )
         
-        # see explanation in forward()
-        #self.coefficient = nn.Parameter(torch.rand((1), requires_grad=True), requires_grad=True)
-        
     def forward(self,inputs):
-        
         time_series = inputs
         
-        # transform to the correct format that is defined by making batch_first=True in the LSTM constructor
+        # transform to the correct format that is defined by making batch_first=True in the GRU constructor
         time_series_trans = time_series.permute(0,2,1)
                 
-        # pass the transposed input to the LSTM
+        # pass the transposed input to the GRU
         gru_out, temp = self.gru(time_series_trans)
-        # lstm_out now contains the short-term memory values from each unrolled LSTM unit
         
-        # we multiply all output values by a scalar coefficient to allow the prediction to match target values above 1 or below -1, in case the output of the main architecture returns values constrained to the range [-1,1]
-        prediction = gru_out#*self.coefficient
+        prediction = gru_out
         return prediction
 
 # long short-term memory network
