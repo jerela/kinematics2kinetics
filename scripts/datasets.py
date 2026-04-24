@@ -34,7 +34,7 @@ class CustomTimeSeriesDataset(Dataset):
         col_labels = ['dataset', 'subject_name', 'trial_name', 'row', 'age', 'sex', 'body_height', 'body_mass', 'leg']
         for gc in included_generalized_coordinates:
             col_labels.append(f'padded_timeseries_jointangles_{gc}')
-        if kinetics_variable in ['medial', 'lateral', 'patellofemoral']:
+        if kinetics_variable in ['summed', 'medial', 'lateral', 'patellofemoral']:
             col_labels.append(f'padded_timeseries_contactforces_kcf_{kinetics_variable}')
         elif kinetics_variable in ['ekfm', 'ekam']:
             col_labels.append(f'padded_timeseries_jointmoments_{kinetics_variable}')
@@ -204,6 +204,7 @@ class CustomTimeSeriesDataset(Dataset):
         """
         is_scalar = False
         is_kinematics = False
+        #is_kinetics = False
         if key in self.scalar_bounds.keys():
             bounds = self.scalar_bounds
             is_scalar = True
@@ -212,6 +213,7 @@ class CustomTimeSeriesDataset(Dataset):
             is_kinematics = True
         elif key in self.kinetics_bounds.keys():
             bounds = self.kinetics_bounds
+            #is_kinetics = True
         else:
             raise Exception(f'Error while normalizing! Key {key} not found in any of the boundary value dictionaries!')
         
@@ -221,7 +223,10 @@ class CustomTimeSeriesDataset(Dataset):
             scaled_data = (data - bounds[key][0]) / (bounds[key][1] - bounds[key][0])
         else:
             zeros = torch.abs(data) < 1e-12
+            #if is_kinematics:
             scaled_data = (data - bounds[key][0]) / (bounds[key][1] - bounds[key][0])
+            #elif is_kinetics:
+            #    scaled_data = data / self.mean_of_target_maxima
             scaled_data[zeros] = 0.0
             if self.center_kinematics_time_series and is_kinematics:
                 center = torch.mean(scaled_data[~zeros])
@@ -302,6 +307,10 @@ class CustomTimeSeriesDataset(Dataset):
             self.target_time_series = data[:,idx_contactforces,:]
         else:
             raise Exception('Target time series could not be identified in Dataset::__process_time_series_data!')
+        
+        # calculate the maximum knee joint loading during each stance phase, and print their mean; currently not used for anything, but could be used to scale kinetics
+        self.mean_of_target_maxima = torch.mean(torch.max(self.target_time_series, dim=2)[0])
+        print(f'target time series mean of maxima: {self.mean_of_target_maxima}')
         
         if self.normalize_data:
             for i, label in enumerate(labels_jointangles):

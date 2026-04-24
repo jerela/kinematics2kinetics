@@ -105,7 +105,7 @@ def run_test_cnn():
     print(f'Sequence length: {sequence_length}')
     
     # put the kernel size of the saved model here
-    krnsz = 9
+    krnsz = 5
     
     # construct the model and load its previously optimized weights
     ts_model = KineticsCNN(n_inputs,n_targets,kernel_size=krnsz)

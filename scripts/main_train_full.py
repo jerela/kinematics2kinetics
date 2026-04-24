@@ -26,7 +26,7 @@ def run_training():
     print(f'Sequence length: {sequence_length}')
     
     # define model hyperparameters, ideally based on previous hyperparameter optimization run
-    hyperparameter_kernel_size = 9
+    hyperparameter_kernel_size = 5
     # epochs should be exaggeratedbly high when we're using early stopping so that we don't accidentally reach the maximum epochs before validation loss plateaus
     hyperparameter_epochs = 10000
     # construct the model
@@ -38,7 +38,7 @@ def run_training():
     validation_loss = training_output['validation_loss'][-1]
     
     print(f'Final training loss after training the full model: {training_loss}, validation loss: {validation_loss}')
-    print(f'Best validation loss of {denormalize(training_output['minimum_loss'], kinetics_bounds[f'kcf_{kinetics_variable}'])} at epoch {training_output['epoch_at_minimum_loss']}')
+    print(f'Best validation loss of {denormalize(training_output['minimum_loss'], kinetics_bounds[f'kcf_{kinetics_variable}'])} at epoch {training_output['epoch_at_minimum_loss']+1}')
 #denormalize(training_loss/float(len(training_set)), kinetics_bounds[f'kcf_{kinetics_variable}'])
 
 def main():
