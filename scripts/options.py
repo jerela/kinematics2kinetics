@@ -5,8 +5,6 @@ kinetics_variable = 'summed'
 # "full" set of kinematics
 included_generalized_coordinates = ['lumbar_extension', 'lumbar_rotation', 'lumbar_bending', 'pelvis_tilt', 'pelvis_list', 'pelvis_rotation', 'hip_flexion_primary', 'hip_adduction_primary', 'hip_rotation_primary', 'knee_angle_primary', 'ankle_angle_primary', 'hip_flexion_secondary', 'hip_adduction_secondary', 'hip_rotation_secondary', 'knee_angle_secondary', 'ankle_angle_secondary']
 
-#included_generalized_coordinates = ['pelvis_tilt', 'pelvis_list', 'pelvis_rotation', 'hip_flexion_primary', 'hip_adduction_primary', 'hip_rotation_primary', 'knee_angle_primary', 'ankle_angle_primary', 'hip_flexion_secondary', 'hip_adduction_secondary', 'hip_rotation_secondary', 'knee_angle_secondary', 'ankle_angle_secondary']
-
 # "lowerbody" set
 #included_generalized_coordinates = ['hip_flexion_primary', 'hip_adduction_primary', 'hip_rotation_primary', 'knee_angle_primary', 'ankle_angle_primary', 'hip_flexion_secondary', 'hip_adduction_secondary', 'hip_rotation_secondary', 'knee_angle_secondary', 'ankle_angle_secondary']
 

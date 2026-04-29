@@ -10,7 +10,7 @@ The entry points are as follows:
 - main_train_kfold.py
   * For prototyping different options and selecting hyperparameters
 - main_test.py
-  * For testing that trained models work as intended
+  * For testing that trained models work as intended. Also generates a CSV of predicted KCF time series.
 - main_network_info.py
   * For showing information about trained models, such as their layer structure or number of parameters
 
@@ -23,7 +23,7 @@ The additional scripts are as follows:
   * Contains the practical implementations of several artificial neural network architectures.
   * The ones used in the publication are KineticsCNN and DemographicScaler
 - options.py
-  * Contains options used by other scripts, such as input/output scaling boundaries, file paths, and training parameters.
+  * Contains options used by other scripts, such as the model to use, input/output scaling boundaries, file paths, and training parameters.
 - visualization.py
   * Contains helper functions and classes specifically for visualizing data
 
