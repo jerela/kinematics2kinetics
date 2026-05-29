@@ -15,15 +15,15 @@ The saved models are .pt files containing a dictionary with the following keys:
 - 'model_state_dict_at_minimum_loss': the *state_dict* of the trained model at the epoch where the smallest validation loss was achieved
 
 The 'model_state_dict_at_minimum_loss' is probably what you want to use, because it contains the state of the model that resulted in the smallest validation loss. Its use is demonstrated in [main_test.py](/scripts/main_test.py).
-The exported model files do not include the preprocessing or postprocessing steps, so make sure to check them out from the [code](scripts/) if you wish to replicate them.
+The exported model files do not include the preprocessing or postprocessing steps, so make sure to check them out from the [code](/scripts) if you wish to replicate them.
 
 ## Model variations
 
-Models predict total tibiofemoral (totKCF), medial tibiofemoral (medKCF), lateral tibiofemoral (latKCF), or patellofemoral (patKCF) knee contact force time series, as indicated in the model's name. Additionally, models come in different variants depending on the input kinematics (joint angle time series) set they use, as described in the [publication](WIP).
+Models predict total tibiofemoral (totKCF), medial tibiofemoral (medKCF), lateral tibiofemoral (latKCF), or patellofemoral (patKCF) compressive knee contact force time series, as indicated in the model's name. Additionally, models come in different variants depending on the input kinematics (joint angle time series) set they use, as described in the [publication](/#publication-and-citation).
 - "full" uses lower-body, pelvis, and lumbar joint angles
 - "lowerbody" uses only lower-body joint angles, i.e., hip, knee, and ankle joint angles from both legs
 - "stanceleg" uses hip, knee, and ankle joint angles from the stance leg
-- "sagittal" uses hip flexion, knee flexion, and ankle flexion from the stance leg ("stanceleg" with hip adduction and rotation angles included)
+- "sagittal" uses hip flexion, knee flexion, and ankle flexion from the stance leg ("stanceleg" without hip adduction and rotation)
 - "knee" uses only knee flexion in the stance leg
 
 ## License

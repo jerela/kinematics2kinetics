@@ -4,7 +4,7 @@
 
 The code contains scripts that are meant to be run as entry points (file names starting with "main") and additional scripts that shouldn't be executed directly.
 
-The entry points are as follows:
+The entry point scripts are:
 - main_train_full.py
   * For training and saving prediction models
 - main_train_kfold.py
