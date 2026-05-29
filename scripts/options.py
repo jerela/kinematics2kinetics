@@ -20,8 +20,8 @@ included_generalized_coordinates = ['lumbar_extension', 'lumbar_rotation', 'lumb
 # main/training settings
 #rng_seed=1
 rng_seed=5
-file_dataset='C:/Users/lavik/OneDrive/Documents/Polvineuro/Extracted/extracted_data_healthy_padded.csv'
-path_output = 'C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output'
+file_dataset = 'DRIVE:/PATH/TO/TRAINING/DATA/extracted_data_healthy_padded.csv'
+path_output = 'DRIVE:/PATH/TO/OUTPUT/DIRECTORY/PyTorch_output'
 
 # training settings
 batch_size=256
@@ -42,23 +42,23 @@ plot_sample=False
 
 # path to the test data containing input kinematics and output kinetics of the test set; markerless uses kinematics from the markerless method, while reference uses kinematics from motion capture marker-based IK through OpenSim
 # this is only used in main_test.py to evaluate the previously-trained network
-#path_test_data='C:/Users/lavik/OneDrive/Documents/Polvineuro/Extracted/reference_test_data_padded.csv'
-path_test_data='C:/Users/lavik/OneDrive/Documents/Polvineuro/Extracted/markerless_test_data_padded.csv'
+#path_test_data='DRIVE:/PATH/TO/TEST/DATA/reference_test_data_padded.csv'
+path_test_data='DRIVE:/PATH/TO/TEST/DATA/markerless_test_data_padded.csv'
 
 # path to the trained model to use for making predictions in main_test.py
 if kinetics_variable == 'summed':
-    path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Outputs/Checkpoints/totKCF_full.pt'
+    path_trained_model = 'DRIVE:/PATH/TO/MODELS/totKCF_full.pt'
 elif kinetics_variable == 'medial':
-    path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Outputs/Checkpoints/medKCF_full.pt'
+    path_trained_model = 'DRIVE:/PATH/TO/MODELS/medKCF_full.pt'
 elif kinetics_variable == 'lateral':
-    path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Outputs/Checkpoints/latKCF_full.pt'
+    path_trained_model = 'DRIVE:/PATH/TO/MODELS/latKCF_full.pt'
 elif kinetics_variable == 'patellofemoral':
-    path_trained_model='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Outputs/Checkpoints/patKCF_full.pt'
+    path_trained_model = 'DRIVE:/PATH/TO/MODELS/patKCF_full.pt'
 else:
     raise ValueError('Kinetics variable should be summed, medial, lateral, or patellofemoral, but none of those was identified in options.py')
 
 
-path_output_predicted_time_series='C:/Users/lavik/OneDrive/Documents/Polvineuro/PyTorch_output/Outputs/Predictions/'
+path_output_predicted_time_series='DRIVE:/PATH/TO/OUTPUT/DIRECTORY/Predictions/'
 
 # settings for min-max scaling data and undoing the scaling
 kinematics_bounds = { # instead of using joint ranges of motion from the musculoskeletal model, let's assume plausible ranges during the stance phase
