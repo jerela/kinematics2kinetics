@@ -7,7 +7,7 @@ from networks import KineticsCNN, DemographicScaler
 
 from visualization import save_sample_figure
 from options import path_test_data, path_trained_model, scalar_bounds, kinetics_bounds, path_output_predicted_time_series, kinetics_variable
-from helpers_train_test import get_time_series
+from helpers_train_test import get_time_series, denormalize
 
 import pandas as pd
 
@@ -25,12 +25,6 @@ def find_information_length(data):
     idx_info = torch.nonzero(nonzeros)
     rightmost = idx_info[-1]
     return rightmost
-
-# a function to return the output to its physically meaningful scale by undoing normalization
-def denormalize(x,bounds):
-    b_min = bounds[0]
-    b_max = bounds[1]
-    return b_min + x*(b_max-b_min)
 
 def test(model, test_set):
     
@@ -111,7 +105,7 @@ def run_test_cnn():
     print(f'Sequence length: {sequence_length}')
     
     # put the kernel size of the saved model here
-    krnsz = 9
+    krnsz = 5
     
     # construct the model and load its previously optimized weights
     ts_model = KineticsCNN(n_inputs,n_targets,kernel_size=krnsz)

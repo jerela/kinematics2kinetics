@@ -27,6 +27,22 @@ def main():
     ts_model = KineticsCNN(n_inputs,n_targets,kernel_size=krnsz)
     model = DemographicScaler(time_series_model=ts_model, num_input_vectors=n_inputs, num_output_vectors=n_targets, sequence_length=sequence_length, name=f'Demographic_CNN_loaded')
     checkpoint = torch.load(path_trained_model)
+    
+    epoch_at_minimum_loss = checkpoint['epoch_at_minimum_loss']
+    training_loss = checkpoint['training_loss']
+    
+    info_str = (
+        f'Loaded checkpoint, summary:\n'
+        f'- epoch where the iteration stopped: {checkpoint['epoch']}\n'
+        f'- final training loss: {training_loss[-1]}\n'
+        f'- final validation loss: {checkpoint['validation_loss'][-1]}\n'
+        f'- minimum validation loss: {checkpoint['minimum_loss']}\n'
+        f'- epoch where the minimum validation loss was achieved: {epoch_at_minimum_loss}\n'
+        f'- training loss at the epoch of minimum validation loss: {training_loss[epoch_at_minimum_loss]}\n'
+    )
+    print(info_str)
+    
+    
     #print(checkpoint['model_state_dict'])
     model.load_state_dict(checkpoint['model_state_dict_at_minimum_loss'])
         

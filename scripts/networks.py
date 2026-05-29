@@ -3,72 +3,25 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-"""
-METHODS/ARCHITECTURES TO EXPLORE:
-- LSTM-FCN PyTorch implementation: https://github.com/flaviagiammarino/lstm-fcn-pytorch/blob/main/lstm_fcn_pytorch/modules.py
-- MLSTM-FCN PyTorch implementation: https://github.com/alexmelekhin/MLSTM-FCN-Pytorch/blob/main/src/model.py
+# various network architectures that map input kinematic time series (and demographics scalars) to output kinetic time series
 
-"""
-# mean square error function that puts less emphasis on values at the beginning and the end of the time series, to account for the high simulation nose in the beginning and end of contact force time series
-class WeightedMSELoss(nn.Module):
-    """
-    A custom loss function that computes the mean square error between the input and the target. Customized to disregard zeros in the target data using a weights mask.
-    Note that the mean is calculated for all elements regardless of shape. Therefore, even if there are several kinetics features or several data samples in the batch, one scalar is returned for loss.
-    Note also that the number of trailing zeros (result of zero-padding) will make this error smaller than the "real" error is.
-    This loss should be used during training to compare different hyperparameter configurations, when the absolute value of the loss (and its physical interpretation) is irrelevant and only the relative losses matter.
-    """
-    def __init__(self):
-        super().__init__()
-        
-        # define the kernel size of the convolution filter
-        self.window_size = 9
-    
-    # because the data may be padded, we use convolution to make sure the weights of the loss mitigate the effects of padding while also applying some mitigation at both ends of the padless time series
-    def __update_weights_mask(self, targets):
-        
-        # create a mask that is 1 for non-zero values in the target time series, and 0 otherwise
-        nonzeros = (targets != 0).float()
-        
-        # get the number of target channels or features
-        target_shape = targets.shape        
-        n_channels = target_shape[1]
-        
-        # construct the filters so their elements sum to 1 (normalized to 1)
-        filters = torch.ones((n_channels, n_channels, self.window_size))/self.window_size
-        padding_size = int((self.window_size-1)/2)
-        
-        # calculate the final weights mask
-        self.weights_mask = F.conv1d(nonzeros, weight=filters, padding=padding_size)
-        
-        #print(f'Weights: {self.weights_mask}')
-        #fig = plt.figure()
-        #fig.add_subplot(121)
-        #plt.plot(self.weights_mask[0,:,:].squeeze(0),'x')
-        #fig.add_subplot(122)
-        #plt.plot(targets[0,:,:].squeeze(0))
-        #plt.show()
-        
-    def forward(self, inputs, targets):
-        self.__update_weights_mask(targets)
-        return torch.mean( ((inputs-targets)**2) * self.weights_mask )
-
-
-# various network architectures that map input kinematic time series to output kinetic time series
-
-# standard feedforward neural network, doesn't perform well
+# standard fully connected feedforward neural network, doesn't perform well
 class KineticsFFN(nn.Module):
-    def __init__(self, num_input_vectors, num_output_vectors, len_sequence, name='KineticsFFN'):
+    def __init__(self, num_input_vectors, num_output_vectors, sequence_length=250, hidden_size=1024, name='KineticsFFN'):
         super().__init__()
         
         self.model_name = name
         
-        self.sequence_length = len_sequence
+        self.sequence_length = sequence_length
         
         self.num_output_vectors = num_output_vectors
         
-        self.fc1 = nn.Linear(num_input_vectors*self.sequence_length, num_output_vectors*self.sequence_length)
-        self.fc2 = nn.Linear(1024, num_output_vectors*self.sequence_length)
+        self.fc1 = nn.Linear(num_input_vectors*self.sequence_length, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, hidden_size)
+        self.fc4 = nn.Linear(hidden_size, num_output_vectors*self.sequence_length)
         self.flattener = nn.Flatten()
+        self.relu = nn.ReLU()
         
     def forward(self,inputs):
         
@@ -77,16 +30,19 @@ class KineticsFFN(nn.Module):
         
         x = self.flattener(time_series)
         x = self.fc1(x)
-        x = F.sigmoid(x)
+        x = self.relu(x)
         x = self.fc2(x)
-        x = F.relu(x)
+        x = self.relu(x)
+        x = self.fc3(x)
+        x = self.relu(x)
+        x = self.fc4(x)
+        x = self.relu(x)
         
         prediction = x.reshape(batch_size,self.sequence_length,self.num_output_vectors)
                 
         return prediction
 
-
-# convolutional neural network
+# convolutional neural network, performs best
 class KineticsCNN(nn.Module):
     def __init__(self, num_input_vectors, num_output_vectors, kernel_size=1, name='KineticsCNN'):
         super().__init__()
@@ -254,7 +210,7 @@ class KineticsCNN2D(nn.Module):
 
 # gated recurrent unit network
 class KineticsGRU(nn.Module):
-    def __init__(self, num_input_vectors, num_output_vectors, num_layers, name='KineticsGRU'):
+    def __init__(self, num_input_vectors, num_output_vectors, num_layers, bidirectional=True, name='KineticsGRU'):
         super().__init__()
         
         self.model_name = name
@@ -263,26 +219,20 @@ class KineticsGRU(nn.Module):
             input_size=num_input_vectors,
             hidden_size=num_output_vectors,
             batch_first=True,
-            num_layers=num_layers,#4,
-            bidirectional=lstm_bidirectional
+            num_layers=num_layers,
+            bidirectional=bidirectional
         )
         
-        # see explanation in forward()
-        #self.coefficient = nn.Parameter(torch.rand((1), requires_grad=True), requires_grad=True)
-        
     def forward(self,inputs):
-        
         time_series = inputs
         
-        # transform to the correct format that is defined by making batch_first=True in the LSTM constructor
+        # transform to the correct format that is defined by making batch_first=True in the GRU constructor
         time_series_trans = time_series.permute(0,2,1)
                 
-        # pass the transposed input to the LSTM
+        # pass the transposed input to the GRU
         gru_out, temp = self.gru(time_series_trans)
-        # lstm_out now contains the short-term memory values from each unrolled LSTM unit
         
-        # we multiply all output values by a scalar coefficient to allow the prediction to match target values above 1 or below -1, in case the output of the main architecture returns values constrained to the range [-1,1]
-        prediction = gru_out#*self.coefficient
+        prediction = gru_out
         return prediction
 
 # long short-term memory network
@@ -335,30 +285,32 @@ class KineticsCNNLSTM(nn.Module):
         
         self.lstm_bidirectional = lstm_bidirectional
         
+        multiplier = 8
+        
         self.c1 = nn.Conv1d(
             in_channels=num_input_vectors,
-            out_channels=num_output_vectors*4,
+            out_channels=num_output_vectors*multiplier,
             kernel_size=kernel_size,
             stride=1,
             padding='same',
             dilation=1,
             padding_mode='zeros'
         )
-        self.bn1 = nn.BatchNorm1d(num_features=num_output_vectors*4)
+        self.bn1 = nn.BatchNorm1d(num_features=num_output_vectors*multiplier)
         
         self.c2 = nn.Conv1d(
-            in_channels=num_output_vectors*4,
-            out_channels=num_output_vectors*8,
+            in_channels=num_output_vectors*multiplier,
+            out_channels=num_output_vectors*multiplier*2,
             kernel_size=kernel_size,
             stride=1,
             padding='same',
             dilation=1,
             padding_mode='zeros'
         )
-        self.bn2 = nn.BatchNorm1d(num_features=num_output_vectors*8)
+        self.bn2 = nn.BatchNorm1d(num_features=num_output_vectors*multiplier*2)
         
         self.c3 = nn.Conv1d(
-            in_channels=num_output_vectors*8,
+            in_channels=num_output_vectors*multiplier*2,
             out_channels=num_output_vectors,
             kernel_size=kernel_size,
             stride=1,
@@ -416,9 +368,10 @@ class KineticsMLSTMFCN(nn.Module):
         
         self.model_name = name
         
-        num_filters_c1 = num_input_vectors*8
-        num_filters_c2 = num_input_vectors*16
-        num_filters_c3 = num_input_vectors*8
+        multiplier = 8
+        num_filters_c1 = num_output_vectors*multiplier*2
+        num_filters_c2 = num_output_vectors*multiplier*4
+        num_filters_c3 = num_output_vectors*multiplier*2
         
         self.lstm = KineticsLSTM(num_input_vectors=num_input_vectors, num_output_vectors=num_output_vectors, hidden_size=hidden_size, num_layers=lstm_num_layers, bidirectional=lstm_bidirectional)
         
