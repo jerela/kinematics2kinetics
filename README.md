@@ -1,12 +1,8 @@
 # kinematics2kinetics
 
 - [Welcome](#welcome)
-  * [Prerequisites](#prerequisites)
-  * [Installing](#installing)
-  * [Running the program](#running-the-program)
 - [Getting started](#getting-started)
   * [Using the code](#using-the-code)
-  * [Using the data](#using-the-data)
   * [Using the models](#using-the-models)
 - [Authors](#authors)
 - [License and copyright](#license-and-copyright)
