@@ -1,6 +1,6 @@
 # Trained knee contact force prediction models
 
-If you use any of the models or their weights, please cite the [publication](WIP).
+If you use any of the models or their weights, please cite the [publication](/#publication-and-citation).
 
 ## Using the models
 
