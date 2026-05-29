@@ -1,6 +1,6 @@
 # Trained knee contact force prediction models
 
-If you use any of the models or their weights, please cite the [publication](/#publication-and-citation).
+If you use any of the models or their weights, please cite the [publication](/README.md#publication-and-citation).
 
 ## Using the models
 
@@ -19,7 +19,7 @@ The exported model files do not include the preprocessing or postprocessing step
 
 ## Model variations
 
-Models predict total tibiofemoral (totKCF), medial tibiofemoral (medKCF), lateral tibiofemoral (latKCF), or patellofemoral (patKCF) compressive knee contact force time series, as indicated in the model's name. Additionally, models come in different variants depending on the input kinematics (joint angle time series) set they use, as described in the [publication](/#publication-and-citation).
+Models predict total tibiofemoral (totKCF), medial tibiofemoral (medKCF), lateral tibiofemoral (latKCF), or patellofemoral (patKCF) compressive knee contact force time series, as indicated in the model's name. Additionally, models come in different variants depending on the input kinematics (joint angle time series) set they use, as described in the [publication](/README.md#publication-and-citation).
 - "full" uses lower-body, pelvis, and lumbar joint angles
 - "lowerbody" uses only lower-body joint angles, i.e., hip, knee, and ankle joint angles from both legs
 - "stanceleg" uses hip, knee, and ankle joint angles from the stance leg
