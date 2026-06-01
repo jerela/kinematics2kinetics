@@ -1,5 +1,7 @@
 # kinematics2kinetics
 
+[![Data DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19494071.svg)](https://doi.org/10.5281/zenodo.19494071)
+
 - [Welcome](#welcome)
 - [Getting started](#getting-started)
   * [Using the code](#using-the-code)
