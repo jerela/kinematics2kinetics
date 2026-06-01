@@ -17,7 +17,7 @@ This repository contains two things:
 1. Python **code** for training artificial neural networks for predicting knee contact force time series from joint angle time series and demographic variables (in the [scripts](scripts/) directory)
 2. Existing trained **models** for predicting knee contact forces (in the [models](models/) directory)
 
-The data for training the artificial neural networks will be put in a separate data repository and will be linked later.
+The data for training the artificial neural networks is available [here](https://doi.org/10.5281/zenodo.19494071).
 
 The repository accompanies and is better understood by reading our [publication](#publication-and-citation).
 

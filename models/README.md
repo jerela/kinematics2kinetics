@@ -1,6 +1,13 @@
 # Trained knee contact force prediction models
 
-If you use any of the models or their weights, please cite the [publication](/README.md#publication-and-citation).
+The models are trained using processed motion capture data available [here](https://doi.org/10.5281/zenodo.19494071). The data comes from the following five open datasets:
+- Camargo et al., 2021, [A comprehensive, open-source dataset of lower limb biomechanics in multiple conditions of stairs, ramps, and level-ground ambulation and transitions](https://doi.org/10.1016/j.jbiomech.2021.110320) (latest version [here](https://www.epic.gatech.edu/opensource-biomechanics-camargo-et-al/))
+- Fukuchi et al., 2023, [A public dataset of running biomechanics and the effects of running speed on lower extremity kinematics and kinetics](https://doi.org/10.7717/peerj.3298) (dataset separately [here](https://doi.org/10.6084/m9.figshare.4543435))
+- Horst et al., 2019, [A public dataset of overground walking kinetics and full-body kinematics in healthy adult individuals](https://doi.org/10.17632/svx74xcrjr.3)
+- Schreiber & Moissenet, 2019, [A multimodal dataset of human gait at different walking speeds established on injury-free adult participants](https://doi.org/10.1038/s41597-019-0124-4) (dataset separately [here](https://doi.org/10.6084/m9.figshare.7734767))
+- Lavikainen et al., 2024, [Gait data from 51 healthy participants with motion capture, inertial measurement units, and computer vision](https://doi.org/10.1016/j.dib.2024.110841) (dataset separately [here](https://doi.org/10.5281/zenodo.10559504))
+
+If you use any of the models or their weights, please cite the [publication](/README.md#publication-and-citation) and preferably also the original datasets.
 
 ## Using the models
 
