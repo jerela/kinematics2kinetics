@@ -10,6 +10,7 @@
 - [License and copyright](#license-and-copyright)
 - [Publication and citation](#publication-and-citation)
 - [Acknowledgements](#acknowledgements)
+- [Funding](#funding)
 <!-- toc -->
 
 ## Welcome
@@ -51,3 +52,7 @@ Publication pending.
 ## Acknowledgements
 
 We thank Peiffer et al. for their work on [MonocularBiomechanics](https://intelligentsensingandrehabilitation.github.io/MonocularBiomechanics/), which was utilized in our publication. The fork of MonocularBiomechanics used in our publication can be found [here](https://github.com/jerela/MonocularBiomechanics/tree/batch-processing).
+
+## Funding
+
+This work was financially supported by the State Research Funding for university-level health research, Kuopio University Hospital, Wellbeing services county of North Savo (project 5041814). The project was also partially funded by the Research Council of Finland (grant #363854).
