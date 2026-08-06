@@ -263,12 +263,12 @@ def run_kfold_ffn():
     run_kfold_validation(model_kinetics=KineticsFFN, model_name='FFN', hyperparameters=hyperparams, kinetics_arguments=args_kinetics)
 
 def run_kfold_gru():
-    hyperparams = ['num_layers', (1,2,4,8)]
+    hyperparams = ['num_layers', (1, 2, 4, 8, 16, 32)]
     run_kfold_validation(model_kinetics=KineticsGRU, model_name='GRU', hyperparameters=hyperparams)
 
 def run_kfold_cnn():
-    hyperparams = ['kernel_size', [5]]
-    #hyperparams = ['kernel_size', [3,5,7,9,11]]
+    #hyperparams = ['kernel_size', [5]]
+    hyperparams = ['kernel_size', [3, 5, 7, 9, 11]]
     run_kfold_validation(model_kinetics=KineticsCNN, model_name='CNN', hyperparameters=hyperparams)
 
 def run_kfold_cnn2d():
@@ -277,15 +277,15 @@ def run_kfold_cnn2d():
 
 def run_kfold_lstm():
     #hyperparams = ['hidden_size', (2,4,8)]
-    hyperparams = ['hidden_size', (16,32)]
+    hyperparams = ['hidden_size', (2, 4, 8, 16, 32)]
     #hyperparams = ['hidden_size', [50]]
     run_kfold_validation(model_kinetics=KineticsLSTM, model_name='LSTM', hyperparameters=hyperparams)
 
 def run_kfold_cnnlstm():
     #hyperparams = ['hidden_size', [20]]
     #args_kinetics = {'kernel_size': 7}
-    #hyperparams = ['kernel_size', (3, 5, 9)]
-    hyperparams = ['kernel_size', [7]]
+    hyperparams = ['kernel_size', (3, 5, 7 9)]
+    #hyperparams = ['kernel_size', [7]]
     args_kinetics = {'hidden_size': 8}
     run_kfold_validation(model_kinetics=KineticsCNNLSTM, model_name='CNN-LSTM', hyperparameters=hyperparams, kinetics_arguments=args_kinetics)
 
