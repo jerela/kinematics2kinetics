@@ -284,7 +284,7 @@ def run_kfold_lstm():
 def run_kfold_cnnlstm():
     #hyperparams = ['hidden_size', [20]]
     #args_kinetics = {'kernel_size': 7}
-    hyperparams = ['kernel_size', (3, 5, 7 9)]
+    hyperparams = ['kernel_size', (3, 5, 7, 9)]
     #hyperparams = ['kernel_size', [7]]
     args_kinetics = {'hidden_size': 8}
     run_kfold_validation(model_kinetics=KineticsCNNLSTM, model_name='CNN-LSTM', hyperparameters=hyperparams, kinetics_arguments=args_kinetics)
