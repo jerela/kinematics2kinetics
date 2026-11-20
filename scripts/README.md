@@ -29,7 +29,7 @@ The additional scripts are as follows:
 
 ## License
 
-The Python scripts in this folder are shared under the license, described below.
+The Python scripts in this folder are shared under the MIT license, described below.
 
 ```
 MIT License
