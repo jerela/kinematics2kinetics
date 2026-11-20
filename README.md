@@ -20,7 +20,9 @@ This repository contains two things:
 1. Python **code** for training artificial neural networks for predicting knee contact force time series from joint angle time series and demographic variables (in the [scripts](scripts/) directory)
 2. Existing trained **models** for predicting knee contact forces (in the [models](models/) directory)
 
-The data for training the artificial neural networks is available [here](https://doi.org/10.5281/zenodo.19494071).
+The data for training the artificial neural networks is available on Zenodo:\
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19494071.svg)](https://doi.org/10.5281/zenodo.19494071)\
+Note that this data combines several existing datasets, so if you use it, kindly cite all the original sources.
 
 The repository accompanies and is better understood by reading our [publication](#publication-and-citation).
 
@@ -46,9 +48,13 @@ Different licenses apply to different parts of the repository.
 - The **models** are shared under the Creative Commons Attribution 4.0 International (CC BY 4.0) license. This is because the data is reprocessed data from five original sources, each under the CC BY 4.0 license, and the **models** are trained on that data. For the license, see the [here](models/#license).
 
 ## Publication and citation
-
-Publication pending.
-
+If you use the models, scripts, or data, please cite the [paper](https://doi.org/10.1007/s10439-026-04461-7):
+```
+Lavikainen, J., Kim, H., Pagnon, D., Arokoski, J., Stenroth, L.
+Predicting Knee Contact Forces During Walking From Monocular Video and Demographic Information.
+Ann Biomed Eng (2026).
+https://doi.org/10.1007/s10439-026-04461-7
+```
 ## Acknowledgements
 
 We thank Peiffer et al. for their work on [MonocularBiomechanics](https://intelligentsensingandrehabilitation.github.io/MonocularBiomechanics/), which was utilized in our publication. The fork of MonocularBiomechanics used in our publication can be found [here](https://github.com/jerela/MonocularBiomechanics/tree/batch-processing).
